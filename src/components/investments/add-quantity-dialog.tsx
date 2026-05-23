@@ -174,7 +174,7 @@ export function AddQuantityDialog({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Trading charges (STT, exchange fees) will be auto-calculated. The weighted average buy price will be recalculated.
+            Trading charges are applied only when enabled in Settings. The weighted average buy price will be recalculated.
           </p>
 
           <DialogFooter className="gap-2">

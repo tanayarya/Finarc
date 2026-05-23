@@ -463,7 +463,7 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           )}
 
           {behaviorType === "STOCK" && !isRecurring && (
-            <p className="text-xs text-muted-foreground">Trading charges (STT, exchange fees) will be auto-calculated for stocks.</p>
+            <p className="text-xs text-muted-foreground">Trading charges are applied for stocks only when enabled in Settings.</p>
           )}
 
           <DialogFooter className="gap-2">

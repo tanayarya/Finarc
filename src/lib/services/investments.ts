@@ -4,29 +4,48 @@ import { toMoney, ZERO } from "@/lib/money";
 import { calculateCharges, type ChargeRates, DEFAULT_CHARGE_RATES } from "@/lib/finance/trading-charges";
 import type { InvestmentType, TradeAction } from "@prisma/client";
 
-// ─── Charge rates from settings ────────────────────────────────────────
+// ─── Charge settings from settings ─────────────────────────────────────
 
-export async function getChargeRates(): Promise<ChargeRates> {
+export interface ChargeSettings extends ChargeRates {
+  enabled: boolean;
+}
+
+const DEFAULT_CHARGE_SETTINGS: ChargeSettings = {
+  enabled: false,
+  ...DEFAULT_CHARGE_RATES,
+};
+
+export async function getChargeSettings(): Promise<ChargeSettings> {
   const setting = await prisma.appSetting.findUnique({ where: { key: "tradingCharges" } });
   if (setting?.value) {
     try {
-      return { ...DEFAULT_CHARGE_RATES, ...JSON.parse(setting.value) };
+      const saved = JSON.parse(setting.value);
+      return { ...DEFAULT_CHARGE_SETTINGS, enabled: saved.enabled ?? true, ...saved };
     } catch {
-      return DEFAULT_CHARGE_RATES;
+      return DEFAULT_CHARGE_SETTINGS;
     }
   }
-  return DEFAULT_CHARGE_RATES;
+  return DEFAULT_CHARGE_SETTINGS;
 }
 
-export async function setChargeRates(rates: Partial<ChargeRates>) {
-  const current = await getChargeRates();
-  const merged = { ...current, ...rates };
+export async function getChargeRates(): Promise<ChargeRates> {
+  const { enabled, ...rates } = await getChargeSettings();
+  return rates;
+}
+
+export async function setChargeSettings(settings: Partial<ChargeSettings>) {
+  const current = await getChargeSettings();
+  const merged = { ...current, ...settings };
   await prisma.appSetting.upsert({
     where: { key: "tradingCharges" },
     update: { value: JSON.stringify(merged) },
     create: { key: "tradingCharges", value: JSON.stringify(merged) },
   });
   return merged;
+}
+
+export async function setChargeRates(rates: Partial<ChargeRates>) {
+  return setChargeSettings(rates);
 }
 
 // ─── Buy stock/MF ──────────────────────────────────────────────────────
@@ -56,8 +75,8 @@ export async function buyInvestment(input: BuyInput) {
   let charges = { total: 0, brokerage: 0, stt: 0, exchangeTxn: 0, sebi: 0, stampDuty: 0, gst: 0, dpCharges: 0 };
 
   if (input.applyCharges !== false && input.type === "STOCK") {
-    const rates = await getChargeRates();
-    charges = calculateCharges("BUY", amount, rates);
+    const { enabled, ...rates } = await getChargeSettings();
+    if (enabled) charges = calculateCharges("BUY", amount, rates);
   }
 
   const netAmount = round2(amount + charges.total);
@@ -166,8 +185,8 @@ export async function sellInvestment(input: SellInput) {
   let charges = { total: 0, brokerage: 0, stt: 0, exchangeTxn: 0, sebi: 0, stampDuty: 0, gst: 0, dpCharges: 0 };
 
   if (input.applyCharges !== false && holding.type === "STOCK") {
-    const rates = await getChargeRates();
-    charges = calculateCharges("SELL", amount, rates);
+    const { enabled, ...rates } = await getChargeSettings();
+    if (enabled) charges = calculateCharges("SELL", amount, rates);
   }
 
   const netAmount = round2(amount - charges.total);

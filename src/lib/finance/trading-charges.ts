@@ -24,6 +24,19 @@ export interface ChargeRates {
   dpCharges: number; // ₹15.93
 }
 
+export const ZERO_CHARGE_RATES: ChargeRates = {
+  brokeragePercent: 0,
+  brokerageFlat: 0,
+  sttBuyPercent: 0,
+  sttSellPercent: 0,
+  exchangeTxnPercent: 0,
+  sebiPerCrore: 0,
+  stampDutyBuyPercent: 0,
+  stampDutySellPercent: 0,
+  gstPercent: 0,
+  dpCharges: 0,
+};
+
 export const DEFAULT_CHARGE_RATES: ChargeRates = {
   brokeragePercent: 0,
   brokerageFlat: 0,

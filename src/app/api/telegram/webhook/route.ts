@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+const APP_TIME_ZONE = "Asia/Kolkata";
+
 /**
  * Telegram Bot Webhook
  * Receives messages from the configured bot and:
@@ -88,11 +90,12 @@ async function handleTransaction(botToken: string, chatId: string, text: string)
   const accountList = accounts.map((a) => `${a.name} (${a.type}, id:${a.id})`).join(", ");
   const categoryList = categories.map((c) => `${c.name} (${c.kind}, id:${c.id})`).join(", ");
 
-  const today = new Date().toISOString().slice(0, 10); // e.g. "2026-05-23"
+  const today = getLocalDateString(); // e.g. "2026-05-23"
+  const currentYear = Number(today.slice(0, 4));
 
   const prompt = `Parse this message into a financial transaction. ONLY income or expense transactions are allowed.
 
-Today's date is: ${today}
+Today's date is: ${today}. The current year is ${currentYear}.
 
 Available accounts: ${accountList}
 Available categories: ${categoryList}
@@ -103,6 +106,8 @@ Rules:
 - If no date mentioned, use today's date: ${today}
 - If user says "today", use: ${today}
 - If user says "yesterday", use one day before ${today}
+- If the user mentions a day/month but no year, use the current year: ${currentYear}
+- Never use your model training date or knowledge cutoff date as the transaction date
 - If type is not clearly income or expense, respond with error
 - Transfers, investments, loan payments, credit payments are NOT allowed via bot
 
@@ -164,10 +169,10 @@ User message: "${text}"`;
       return;
     }
 
-    // Create the transaction
-    const txnDate = parsed.occurredAt && new Date(parsed.occurredAt).getFullYear() >= 2025
-      ? new Date(parsed.occurredAt)
-      : new Date(); // fallback to today if AI returns a bad date
+    // The model can hallucinate dates from its training cutoff. Keep final date
+    // resolution deterministic for relative or omitted dates.
+    const occurredAtDate = resolveTelegramTransactionDate(text, parsed.occurredAt, today);
+    const txnDate = new Date(`${occurredAtDate}T00:00:00.000Z`);
 
     await prisma.transaction.create({
       data: {
@@ -189,11 +194,78 @@ User message: "${text}"`;
       `Description: ${parsed.description ?? "—"}\n` +
       `Account: ${account?.name ?? "Unknown"}\n` +
       `Category: ${category?.name ?? "—"}\n` +
-      `Date: ${parsed.occurredAt ?? "Today"}`
+      `Date: ${occurredAtDate}`
     );
   } catch (e) {
     await sendReply(botToken, chatId, "Error processing message. Please try again.");
   }
+}
+
+function getLocalDateString(date = new Date(), timeZone = APP_TIME_ZONE): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) return date.toISOString().slice(0, 10);
+  return `${year}-${month}-${day}`;
+}
+
+function resolveTelegramTransactionDate(message: string, aiOccurredAt: unknown, today: string): string {
+  const normalized = message.toLowerCase();
+
+  if (/\bday before yesterday\b/.test(normalized)) return addDaysToDateString(today, -2);
+  if (/\byesterday\b/.test(normalized)) return addDaysToDateString(today, -1);
+  if (/\btoday\b/.test(normalized)) return today;
+
+  const parsedDate = parseModelDate(aiOccurredAt);
+  const hasExplicitDate = messageHasExplicitDate(normalized);
+
+  if (!hasExplicitDate) return today;
+  if (!parsedDate) return today;
+
+  const hasExplicitYear = messageHasExplicitYear(normalized);
+  if (hasExplicitYear) return parsedDate;
+
+  const currentYear = today.slice(0, 4);
+  return `${currentYear}-${parsedDate.slice(5)}`;
+}
+
+function parseModelDate(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+
+  const [, year, month, day] = match;
+  const date = new Date(`${year}-${month}-${day}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  if (date.toISOString().slice(0, 10) !== `${year}-${month}-${day}`) return null;
+
+  return `${year}-${month}-${day}`;
+}
+
+function messageHasExplicitDate(message: string): boolean {
+  return (
+    /\b(?:jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\b/.test(message) ||
+    /\b\d{1,2}(?:st|nd|rd|th)\b/.test(message) ||
+    /\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/.test(message)
+  );
+}
+
+function messageHasExplicitYear(message: string): boolean {
+  return /\b(?:19|20)\d{2}\b/.test(message) || /\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/.test(message);
+}
+
+function addDaysToDateString(dateString: string, days: number): string {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
 }
 
 async function handleAIQuery(botToken: string, chatId: string, query: string) {

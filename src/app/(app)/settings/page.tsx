@@ -285,7 +285,7 @@ function PrefRow({ title, description, children }: { title: string; description:
 }
 
 function TradingChargesSettings() {
-  const { data, mutate: mutateCharges } = useSWR<Record<string, number>>("/api/settings/charges");
+  const { data, mutate: mutateCharges } = useSWR<Record<string, number | boolean>>("/api/settings/charges");
   const [saving, setSaving] = React.useState(false);
 
   const fields = [
@@ -302,19 +302,21 @@ function TradingChargesSettings() {
   ];
 
   const [values, setValues] = React.useState<Record<string, string>>({});
+  const [enabled, setEnabled] = React.useState(false);
 
   React.useEffect(() => {
     if (data) {
       const v: Record<string, string> = {};
-      for (const f of fields) v[f.key] = String(data[f.key] ?? "");
+      for (const f of fields) v[f.key] = String(data[f.key] ?? 0);
       setValues(v);
+      setEnabled(Boolean(data.enabled));
     }
   }, [data]);
 
   const onSave = async () => {
     setSaving(true);
     try {
-      const payload: Record<string, number> = {};
+      const payload: Record<string, number | boolean> = { enabled };
       for (const f of fields) payload[f.key] = Number(values[f.key] ?? 0);
       await fetch("/api/settings/charges", {
         method: "PATCH",
@@ -335,7 +337,7 @@ function TradingChargesSettings() {
       <CardHeader>
         <CardTitle className="text-sm">Trading charges (equity delivery)</CardTitle>
         <CardDescription>
-          These rates are applied automatically when you buy or sell stocks. Pre-filled with Zerodha&apos;s current delivery rates. Adjust if your broker differs.
+          Turn this on to deduct configured charges when buying or selling stocks. Rates are pre-filled with the default delivery values and can be adjusted for your broker.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -343,12 +345,22 @@ function TradingChargesSettings() {
           <p className="text-sm text-muted-foreground">Loading...</p>
         ) : (
           <>
+            <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              <div>
+                <p className="text-sm font-medium">Apply trading charges</p>
+                <p className="text-xs text-muted-foreground">
+                  {enabled ? "Stock buy/sell transactions use net amounts after charges." : "Stock buy/sell transactions ignore trading charges."}
+                </p>
+              </div>
+              <Switch checked={enabled} onCheckedChange={setEnabled} />
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {fields.map((f) => (
                 <div key={f.key} className="space-y-1">
                   <Label className="text-xs">{f.label}</Label>
                   <Input
                     inputMode="decimal"
+                    disabled={!enabled}
                     value={values[f.key] ?? ""}
                     onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
                   />

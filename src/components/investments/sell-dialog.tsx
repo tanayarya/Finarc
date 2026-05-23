@@ -180,7 +180,7 @@ export function SellDialog({
           </div>
           {holding.type === "STOCK" && (
             <p className="text-xs text-muted-foreground">
-              Trading charges (STT, DP charges, etc.) will be auto-deducted. Net proceeds will be credited to the linked account.
+              Trading charges are deducted from stock proceeds only when enabled in Settings.
             </p>
           )}
           <DialogFooter className="gap-2">
