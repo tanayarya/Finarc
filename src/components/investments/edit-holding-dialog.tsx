@@ -21,6 +21,10 @@ interface HoldingItem {
   avgBuyPrice: number;
   type: string;
   assetClass: string;
+  invested?: number;
+  interestRate?: number | null;
+  interestFreq?: string | null;
+  maturityDate?: string | null;
 }
 
 interface FormValues {
@@ -43,10 +47,13 @@ export function EditHoldingDialog({
 
   React.useEffect(() => {
     if (open && holding) {
-      const isFdBondPf = ["FIXED_DEPOSIT", "BOND", "PROVIDENT_FUND", "COMMODITY"].includes(holding.type);
+      const isAmountOnly = ["FIXED_DEPOSIT", "BOND"].includes(holding.type) || holding.assetClass === "RECURRING_DEPOSIT";
+      const isSingleAmount = isAmountOnly || ["PROVIDENT_FUND", "COMMODITY"].includes(holding.type);
       form.reset({
-        units: isFdBondPf ? "1" : holding.units.toString(),
-        pricePerUnit: holding.avgBuyPrice.toString(),
+        units: isSingleAmount ? "1" : holding.units.toString(),
+        pricePerUnit: isAmountOnly
+          ? String(holding.invested ?? holding.units * holding.avgBuyPrice)
+          : holding.avgBuyPrice.toString(),
       });
     }
   }, [open, holding, form]);
@@ -57,15 +64,14 @@ export function EditHoldingDialog({
     if (!values.pricePerUnit || Number(values.pricePerUnit) <= 0) { toast.error("Enter valid price"); return; }
 
     try {
-      // We need the first trade ID for this holding — fetch trades
-      const res = await fetch(`/api/investments`);
-      const json = await res.json();
       // For simplicity, we'll call the edit API with the holding ID
       // The API will find the most recent BUY trade and update it
+      const isAmountOnly = ["FIXED_DEPOSIT", "BOND"].includes(holding.type) || holding.assetClass === "RECURRING_DEPOSIT";
       await patchJson(`/api/investments/${holding.id}`, {
         tradeId: "latest", // special value — API will find latest trade
-        units: Number(values.units),
-        pricePerUnit: Number(values.pricePerUnit),
+        ...(isAmountOnly
+          ? { amount: Number(values.pricePerUnit) }
+          : { units: Number(values.units), pricePerUnit: Number(values.pricePerUnit) }),
       });
       toast.success("Holding updated");
       onOpenChange(false);
@@ -78,24 +84,27 @@ export function EditHoldingDialog({
 
   if (!holding) return null;
 
-  const isFdBondPf = ["FIXED_DEPOSIT", "BOND", "PROVIDENT_FUND", "COMMODITY"].includes(holding.type);
+  const isAmountOnly = ["FIXED_DEPOSIT", "BOND"].includes(holding.type) || holding.assetClass === "RECURRING_DEPOSIT";
+  const isSingleAmount = isAmountOnly || ["PROVIDENT_FUND", "COMMODITY"].includes(holding.type);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>Edit — {holding.name}</DialogTitle>
-          <DialogDescription>{holding.symbol} · Update units or buy price. Linked transaction will be adjusted.</DialogDescription>
+          <DialogDescription>
+            {holding.symbol} · {isAmountOnly ? "Update invested amount." : "Update units or buy price."} Linked transaction will be adjusted.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
-          {!isFdBondPf && (
+          {!isSingleAmount && (
             <div className="space-y-1.5">
               <Label>Units</Label>
               <Input inputMode="decimal" {...form.register("units")} />
             </div>
           )}
           <div className="space-y-1.5">
-            <Label>{isFdBondPf ? "Total amount" : "Average buy price"}</Label>
+            <Label>{isSingleAmount ? "Total amount" : "Average buy price"}</Label>
             <Input inputMode="decimal" {...form.register("pricePerUnit")} />
           </div>
           <p className="text-xs text-muted-foreground">

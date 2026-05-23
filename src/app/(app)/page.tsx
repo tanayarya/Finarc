@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -20,6 +21,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
@@ -92,6 +94,10 @@ export default function DashboardPage() {
               icon={<ArrowDownRight className="h-4 w-4 text-muted-foreground" />}
             />
           </div>
+
+          {data.maturedHoldings.length > 0 && (
+            <MaturityReviewCard holdings={data.maturedHoldings} />
+          )}
 
           <div className="grid gap-3 lg:grid-cols-3">
             <SavingsCard
@@ -343,6 +349,40 @@ function CreditObligationsCard({
             );
           })
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MaturityReviewCard({
+  holdings,
+}: {
+  holdings: DashboardData["maturedHoldings"];
+}) {
+  const { formatCurrency } = useCurrency();
+  const primary = holdings[0];
+  const extraCount = holdings.length - 1;
+
+  return (
+    <Card className="border-amber-500/30 bg-amber-500/5">
+      <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-3">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300">
+            <AlertTriangle className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-sm font-medium">
+              {primary.name} has matured{extraCount > 0 ? `, plus ${extraCount} more` : ""}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Review redemption for {formatCurrency(primary.principal)} in {primary.accountName}
+              {primary.maturityDate ? ` · matured ${format(new Date(primary.maturityDate), "MMM d, yyyy")}` : ""}.
+            </p>
+          </div>
+        </div>
+        <Button asChild size="sm" variant="outline" className="sm:self-center">
+          <Link href="/investments">Review</Link>
+        </Button>
       </CardContent>
     </Card>
   );

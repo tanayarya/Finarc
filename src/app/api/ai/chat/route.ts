@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     const openaiKey = (await prisma.appSetting.findUnique({ where: { key: "openaiApiKey" } }))?.value;
     const ollamaUrl = (await prisma.appSetting.findUnique({ where: { key: "ollamaUrl" } }))?.value ?? "http://localhost:11434";
     const shareDetails = (await prisma.appSetting.findUnique({ where: { key: "aiShareDetails" } }))?.value === "true";
-    const openaiModel = (await prisma.appSetting.findUnique({ where: { key: "openaiModel" } }))?.value ?? "gpt-4o-mini";
+    const openaiModel = (await prisma.appSetting.findUnique({ where: { key: "openaiModel" } }))?.value ?? "gpt-5-mini";
     const ollamaModel = (await prisma.appSetting.findUnique({ where: { key: "ollamaModel" } }))?.value ?? "llama3.2";
 
     if (aiProvider === "openai" && !openaiKey) return fail("OpenAI API key not configured. Go to Settings → AI.", 400);
@@ -105,8 +105,9 @@ async function callOpenAI(apiKey: string, model: string, systemPrompt: string, u
         { role: "system", content: systemPrompt },
         { role: "user", content: userMessage },
       ],
-      max_tokens: 300,
-      temperature: 0.7,
+      max_completion_tokens: 300,
+      ...(usesDefaultSampling(model) ? { reasoning_effort: "minimal" } : {}),
+      ...(!usesDefaultSampling(model) ? { temperature: 0.7 } : {}),
     }),
   });
   if (!res.ok) {
@@ -115,6 +116,10 @@ async function callOpenAI(apiKey: string, model: string, systemPrompt: string, u
   }
   const data = await res.json();
   return data.choices?.[0]?.message?.content ?? "No response";
+}
+
+function usesDefaultSampling(model: string) {
+  return /^gpt-5(?:[.-]|$)/.test(model);
 }
 
 async function callOllama(baseUrl: string, model: string, systemPrompt: string, userMessage: string): Promise<string> {

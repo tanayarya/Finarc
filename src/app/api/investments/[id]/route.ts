@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { ok, fail, handleError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { Decimal } from "decimal.js";
+import { syncHoldingInterestRule } from "@/lib/services/investments";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,8 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
   try {
     const holdingId = ctx.params.id;
     const body = await req.json();
-    const { tradeId, units, pricePerUnit } = body;
+    const { tradeId, amount } = body;
+    let { units, pricePerUnit } = body;
 
     if (!tradeId) return fail("tradeId required", 400);
 
@@ -47,6 +49,12 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
 
     const holding = await prisma.holding.findUnique({ where: { id: holdingId } });
     if (!holding) return fail("Holding not found", 404);
+
+    const isAmountOnly = holding.type === "BOND" || holding.type === "FIXED_DEPOSIT" || holding.assetClass === "RECURRING_DEPOSIT";
+    if (isAmountOnly && amount !== undefined) {
+      units = amount;
+      pricePerUnit = 1;
+    }
 
     const oldUnits = new Decimal(trade.units.toString());
     const oldPrice = new Decimal(trade.price.toString());
@@ -95,8 +103,13 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
       data: {
         units: currentUnits.toFixed(6),
         avgBuyPrice: avgBuyPrice.toFixed(4),
+        principalAmount: isAmountOnly ? currentUnits.mul(avgBuyPrice).toFixed(2) : undefined,
       },
     });
+
+    if (isAmountOnly) {
+      await syncHoldingInterestRule(holdingId, trade.occurredAt);
+    }
 
     // Adjust linked transaction if it exists
     if (trade.transactionId) {

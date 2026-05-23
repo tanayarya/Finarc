@@ -46,6 +46,7 @@ interface HoldingItem {
   interestRate: number | null;
   interestFreq: string | null;
   maturityDate: string | null;
+  purchaseDate: string;
   tags: string[];
 }
 

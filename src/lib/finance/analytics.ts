@@ -29,12 +29,12 @@ export interface AccountShare {
 export async function totalsForRange(range: DateRange) {
   const txns = await prisma.transaction.findMany({
     where: { occurredAt: { gte: range.from, lte: range.to } },
-    select: { type: true, amount: true },
+    select: { type: true, amount: true, account: { select: { type: true } } },
   });
   let income = ZERO;
   let expense = ZERO;
   for (const t of txns) {
-    if (t.type === "INCOME") income = add(income, t.amount);
+    if (t.type === "INCOME" && t.account?.type !== "CREDIT") income = add(income, t.amount);
     else if (t.type === "EXPENSE") expense = add(expense, t.amount);
   }
   return {
@@ -48,7 +48,7 @@ export async function totalsForRange(range: DateRange) {
 export async function incomeExpenseSeries(range: DateRange): Promise<SeriesPoint[]> {
   const txns = await prisma.transaction.findMany({
     where: { occurredAt: { gte: range.from, lte: range.to } },
-    select: { type: true, amount: true, occurredAt: true },
+    select: { type: true, amount: true, occurredAt: true, account: { select: { type: true } } },
     orderBy: { occurredAt: "asc" },
   });
 
@@ -59,7 +59,7 @@ export async function incomeExpenseSeries(range: DateRange): Promise<SeriesPoint
     return days.map((d) => {
       const dayTxns = txns.filter((t) => isSameDay(t.occurredAt, d));
       const income = dayTxns
-        .filter((t) => t.type === "INCOME")
+        .filter((t) => t.type === "INCOME" && t.account?.type !== "CREDIT")
         .reduce((acc, t) => acc + Number(t.amount), 0);
       const expense = dayTxns
         .filter((t) => t.type === "EXPENSE")
@@ -77,7 +77,7 @@ export async function incomeExpenseSeries(range: DateRange): Promise<SeriesPoint
   return months.map((m) => {
     const monthTxns = txns.filter((t) => isSameMonth(t.occurredAt, m));
     const income = monthTxns
-      .filter((t) => t.type === "INCOME")
+      .filter((t) => t.type === "INCOME" && t.account?.type !== "CREDIT")
       .reduce((acc, t) => acc + Number(t.amount), 0);
     const expense = monthTxns
       .filter((t) => t.type === "EXPENSE")
@@ -159,16 +159,17 @@ export async function accountDistribution(): Promise<AccountShare[]> {
 
   // Distribution shows where assets sit (positive only)
   const assets = balances.filter(({ account, balance }) =>
-    ["SAVINGS", "CASH", "INVESTMENT"].includes(account.type) && balance > 0
+    (["SAVINGS", "CASH", "INVESTMENT"].includes(account.type) && balance > 0) ||
+    (["CREDIT", "LOAN"].includes(account.type) && balance < 0)
   );
-  const total = assets.reduce((a, b) => a + b.balance, 0);
+  const total = assets.reduce((a, b) => a + Math.abs(b.balance), 0);
   return assets
     .map(({ account, balance }) => ({
       accountId: account.id,
       name: account.name,
       type: account.type,
-      amount: round(balance),
-      share: total === 0 ? 0 : balance / total,
+      amount: round(Math.abs(balance)),
+      share: total === 0 ? 0 : Math.abs(balance) / total,
     }))
     .sort((a, b) => b.amount - a.amount);
 }

@@ -51,11 +51,14 @@ export default function AccountsPage() {
   }, {});
 
   const totalAssets = allAccounts
-    .filter((a) => TYPE_META[a.type].asset)
-    .reduce((s, a) => s + Number(a.balance), 0);
+    .reduce((s, a) => {
+      const balance = Number(a.balance);
+      if (TYPE_META[a.type].asset) return s + balance;
+      return balance < 0 ? s + Math.abs(balance) : s;
+    }, 0);
   const totalLiab = allAccounts
     .filter((a) => !TYPE_META[a.type].asset)
-    .reduce((s, a) => s + Number(a.balance), 0);
+    .reduce((s, a) => s + Math.max(0, Number(a.balance)), 0);
 
   return (
     <div className="space-y-6">

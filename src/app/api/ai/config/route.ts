@@ -10,7 +10,7 @@ export async function GET() {
     const hasKey = Boolean((await prisma.appSetting.findUnique({ where: { key: "openaiApiKey" } }))?.value);
     const ollamaUrl = (await prisma.appSetting.findUnique({ where: { key: "ollamaUrl" } }))?.value ?? "http://localhost:11434";
     const shareDetails = (await prisma.appSetting.findUnique({ where: { key: "aiShareDetails" } }))?.value === "true";
-    const openaiModel = (await prisma.appSetting.findUnique({ where: { key: "openaiModel" } }))?.value ?? "gpt-4o-mini";
+    const openaiModel = (await prisma.appSetting.findUnique({ where: { key: "openaiModel" } }))?.value ?? "gpt-5-mini";
     const ollamaModel = (await prisma.appSetting.findUnique({ where: { key: "ollamaModel" } }))?.value ?? "llama3.2";
 
     return ok({ provider, hasOpenAIKey: hasKey, ollamaUrl, shareDetails, openaiModel, ollamaModel });

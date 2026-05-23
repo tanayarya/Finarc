@@ -96,6 +96,11 @@ async function assertTransactionShape(input: z.infer<typeof transactionCreateSch
       if (!(from.type === "SAVINGS" || from.type === "CASH"))
         throw new Error("Pay loan from savings or cash account");
       if (to.type !== "LOAN") throw new Error("Destination must be a loan account");
+      const { computeAccountBalance } = await import("@/lib/finance/balances");
+      const outstanding = await computeAccountBalance(to.id);
+      if (outstanding.lessThan(input.amount)) {
+        throw new Error("Loan payment cannot exceed outstanding principal");
+      }
       break;
     }
   }

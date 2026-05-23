@@ -26,6 +26,12 @@ interface HoldingItem {
   units: number;
   currentPrice: number;
   type: string;
+  assetClass?: string;
+  invested?: number;
+  interestRate?: number | null;
+  interestFreq?: string | null;
+  maturityDate?: string | null;
+  purchaseDate?: string;
 }
 
 interface FormValues {
@@ -75,9 +81,11 @@ export function SellDialog({
 
   React.useEffect(() => {
     if (open && holding) {
+      const isFdOrBond = holding.type === "BOND" || holding.type === "FIXED_DEPOSIT";
+      const amount = isFdOrBond ? expectedFixedIncomeRedemption(holding, new Date()) : holding.currentPrice;
       form.reset({
         units: holding.units.toString(),
-        pricePerUnit: holding.currentPrice.toString(),
+        pricePerUnit: amount.toFixed(2),
         occurredAt: new Date(),
         notes: "",
       });
@@ -115,6 +123,8 @@ export function SellDialog({
   if (!holding) return null;
 
   const isFdOrBond = holding.type === "BOND" || holding.type === "FIXED_DEPOSIT";
+  const redemptionDate = form.watch("occurredAt");
+  const expectedAmount = isFdOrBond ? expectedFixedIncomeRedemption(holding, new Date(redemptionDate)) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -155,7 +165,9 @@ export function SellDialog({
             <div className="space-y-1.5">
               <Label>Redemption amount received</Label>
               <Input inputMode="decimal" placeholder="Total amount (principal + interest)" {...form.register("pricePerUnit")} />
-              <p className="text-[10px] text-muted-foreground">Enter the exact amount credited to your account (after any penalties or TDS).</p>
+              <p className="text-[10px] text-muted-foreground">
+                Expected {formatCurrency(expectedAmount)}. Edit if bank credited a different amount after TDS or penalties.
+              </p>
             </div>
           )}
           <div className="space-y-1.5">
@@ -191,4 +203,18 @@ export function SellDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function expectedFixedIncomeRedemption(holding: HoldingItem, date: Date) {
+  const principal = Number(holding.invested ?? holding.units * holding.currentPrice);
+  if (holding.interestFreq !== "ON_MATURITY" || !holding.interestRate || !holding.purchaseDate) {
+    return principal;
+  }
+
+  const purchaseDate = new Date(holding.purchaseDate);
+  const maturityDate = holding.maturityDate ? new Date(holding.maturityDate) : date;
+  const endDate = date < maturityDate ? date : maturityDate;
+  const days = Math.max(0, Math.round((endDate.getTime() - purchaseDate.getTime()) / 86400000));
+  const interest = (principal * Number(holding.interestRate) * days) / (100 * 365);
+  return Math.round((principal + interest) * 100) / 100;
 }

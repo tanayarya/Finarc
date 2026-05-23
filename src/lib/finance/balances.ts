@@ -154,6 +154,7 @@ export async function computeNetWorth(asOf?: Date): Promise<NetWorthBreakdown> {
   let totalLiabilities = ZERO;
   const byAccount = balances.map(({ account, balance }) => {
     if (isAsset(account.type)) totalAssets = add(totalAssets, balance);
+    else if (balance.isNegative()) totalAssets = add(totalAssets, balance.abs());
     else totalLiabilities = add(totalLiabilities, balance);
     return {
       accountId: account.id,

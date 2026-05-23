@@ -596,6 +596,25 @@ function TelegramSettings() {
 }
 
 function AISettings() {
+  const openaiModels = [
+    { value: "gpt-5-mini", label: "GPT-5 mini", description: "Recommended: strong finance reasoning, efficient cost" },
+    { value: "gpt-5-nano", label: "GPT-5 nano", description: "Cheapest: quick summaries and simple transaction parsing" },
+    { value: "gpt-4.1-nano", label: "GPT-4.1 nano", description: "Very low-cost non-reasoning option" },
+    { value: "gpt-4.1-mini", label: "GPT-4.1 mini", description: "Fast, reliable, large context" },
+    { value: "gpt-4o-mini", label: "GPT-4o mini", description: "Very cheap legacy-friendly option" },
+    { value: "gpt-5", label: "GPT-5", description: "Higher quality for deeper analysis" },
+    { value: "gpt-5.2", label: "GPT-5.2", description: "Latest premium option" },
+    { value: "gpt-4.1", label: "GPT-4.1", description: "Strong non-reasoning fallback" },
+  ];
+  const ollamaModels = [
+    { value: "llama3.2", label: "Llama 3.2", description: "Good general local default" },
+    { value: "llama3.1", label: "Llama 3.1", description: "Reliable finance/chat fallback" },
+    { value: "qwen2.5", label: "Qwen 2.5", description: "Strong structured extraction" },
+    { value: "mistral", label: "Mistral", description: "Lightweight local option" },
+    { value: "gemma2", label: "Gemma 2", description: "Efficient local model" },
+    { value: "phi3", label: "Phi-3", description: "Small and fast" },
+  ];
+
   const { data: config, mutate: mutateConfig } = useSWR<{
     provider: string;
     hasOpenAIKey: boolean;
@@ -608,8 +627,10 @@ function AISettings() {
   const [provider, setProvider] = React.useState("openai");
   const [openaiKey, setOpenaiKey] = React.useState("");
   const [ollamaUrl, setOllamaUrl] = React.useState("http://localhost:11434");
-  const [openaiModel, setOpenaiModel] = React.useState("gpt-4o-mini");
+  const [openaiModel, setOpenaiModel] = React.useState("gpt-5-mini");
   const [ollamaModel, setOllamaModel] = React.useState("llama3.2");
+  const [openaiCustomModel, setOpenaiCustomModel] = React.useState(false);
+  const [ollamaCustomModel, setOllamaCustomModel] = React.useState(false);
   const [shareDetails, setShareDetails] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
@@ -620,6 +641,8 @@ function AISettings() {
       setShareDetails(config.shareDetails);
       setOpenaiModel(config.openaiModel);
       setOllamaModel(config.ollamaModel);
+      setOpenaiCustomModel(!openaiModels.some((m) => m.value === config.openaiModel));
+      setOllamaCustomModel(!ollamaModels.some((m) => m.value === config.ollamaModel));
     }
   }, [config]);
 
@@ -662,8 +685,24 @@ function AISettings() {
             </div>
             <div className="max-w-sm space-y-1.5">
               <Label className="text-xs">Model</Label>
-              <Input value={openaiModel} onChange={(e) => setOpenaiModel(e.target.value)} placeholder="gpt-4o-mini" />
-              <p className="text-[10px] text-muted-foreground">e.g. gpt-4o-mini, gpt-4o, gpt-4-turbo, gpt-3.5-turbo</p>
+              <Select value={openaiCustomModel ? "custom" : openaiModel} onValueChange={(value) => {
+                setOpenaiCustomModel(value === "custom");
+                if (value !== "custom") setOpenaiModel(value);
+              }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {openaiModels.map((model) => (
+                    <SelectItem key={model.value} value={model.value}>{model.label}</SelectItem>
+                  ))}
+                  <SelectItem value="custom">Custom model ID</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                Recommended: GPT-5 mini for quality/cost, GPT-5 nano or GPT-4.1 nano for cheapest, GPT-4.1 mini or GPT-4o mini for fast low-cost use.
+              </p>
+              {openaiCustomModel && (
+                <Input value={openaiModel} onChange={(e) => setOpenaiModel(e.target.value)} placeholder="gpt-5-mini" />
+              )}
             </div>
           </>
         )}
@@ -676,8 +715,24 @@ function AISettings() {
             </div>
             <div className="max-w-sm space-y-1.5">
               <Label className="text-xs">Model</Label>
-              <Input value={ollamaModel} onChange={(e) => setOllamaModel(e.target.value)} placeholder="llama3.2" />
-              <p className="text-[10px] text-muted-foreground">e.g. llama3.2, mistral, gemma2, phi3</p>
+              <Select value={ollamaCustomModel ? "custom" : ollamaModel} onValueChange={(value) => {
+                setOllamaCustomModel(value === "custom");
+                if (value !== "custom") setOllamaModel(value);
+              }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ollamaModels.map((model) => (
+                    <SelectItem key={model.value} value={model.value}>{model.label}</SelectItem>
+                  ))}
+                  <SelectItem value="custom">Custom local model</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                Recommended local picks: Llama 3.2, Qwen 2.5, Mistral, Gemma 2, or any model you have pulled in Ollama.
+              </p>
+              {ollamaCustomModel && (
+                <Input value={ollamaModel} onChange={(e) => setOllamaModel(e.target.value)} placeholder="llama3.2" />
+              )}
             </div>
           </>
         )}

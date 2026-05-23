@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
 
 async function handleTransaction(botToken: string, chatId: string, text: string) {
   const openaiKey = (await prisma.appSetting.findUnique({ where: { key: "openaiApiKey" } }))?.value;
-  const openaiModel = (await prisma.appSetting.findUnique({ where: { key: "openaiModel" } }))?.value ?? "gpt-4o-mini";
+  const openaiModel = (await prisma.appSetting.findUnique({ where: { key: "openaiModel" } }))?.value ?? "gpt-5-mini";
 
   if (!openaiKey) {
     await sendReply(botToken, chatId, "OpenAI API key not configured. Set it in Settings → AI to enable transaction parsing.");
@@ -126,13 +126,14 @@ User message: "${text}"`;
       body: JSON.stringify({
         model: openaiModel,
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 200,
-        temperature: 0,
+        max_completion_tokens: 200,
+        ...(usesDefaultSampling(openaiModel) ? { reasoning_effort: "minimal" } : {}),
+        ...(!usesDefaultSampling(openaiModel) ? { temperature: 0 } : {}),
       }),
     });
 
     if (!res.ok) {
-      await sendReply(botToken, chatId, "Failed to process. OpenAI API error.");
+      await sendReply(botToken, chatId, `Failed to process. OpenAI API error for ${openaiModel}. Check the model in Settings → AI.`);
       return;
     }
 
@@ -270,7 +271,7 @@ function addDaysToDateString(dateString: string, days: number): string {
 
 async function handleAIQuery(botToken: string, chatId: string, query: string) {
   const openaiKey = (await prisma.appSetting.findUnique({ where: { key: "openaiApiKey" } }))?.value;
-  const openaiModel = (await prisma.appSetting.findUnique({ where: { key: "openaiModel" } }))?.value ?? "gpt-4o-mini";
+  const openaiModel = (await prisma.appSetting.findUnique({ where: { key: "openaiModel" } }))?.value ?? "gpt-5-mini";
   const shareDetails = (await prisma.appSetting.findUnique({ where: { key: "aiShareDetails" } }))?.value === "true";
 
   if (!openaiKey) {
@@ -313,8 +314,9 @@ async function handleAIQuery(botToken: string, chatId: string, query: string) {
           { role: "system", content: `You are Finarc AI, a personal finance assistant responding via Telegram. Rules:\n- Keep responses SHORT (max 3-4 lines)\n- Use plain text only, no markdown\n- Give direct numbers and facts\n- Don't explain what you can't do, just answer what you can\n- Format amounts clearly\n- If asked about investments, show: name, buy price, current value if available\n- Never say "based on the data provided" or similar filler\n\nUser's financial data:\n${context}` },
           { role: "user", content: query },
         ],
-        max_tokens: 300,
-        temperature: 0.7,
+        max_completion_tokens: 300,
+        ...(usesDefaultSampling(openaiModel) ? { reasoning_effort: "minimal" } : {}),
+        ...(!usesDefaultSampling(openaiModel) ? { temperature: 0.7 } : {}),
       }),
     });
 
@@ -325,6 +327,10 @@ async function handleAIQuery(botToken: string, chatId: string, query: string) {
   } catch {
     await sendReply(botToken, chatId, "Failed to get AI response.");
   }
+}
+
+function usesDefaultSampling(model: string) {
+  return /^gpt-5(?:[.-]|$)/.test(model);
 }
 
 async function sendReply(botToken: string, chatId: string, text: string) {

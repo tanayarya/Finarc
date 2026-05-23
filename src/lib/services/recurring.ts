@@ -79,7 +79,8 @@ export async function materializeDueRecurring(now = new Date()): Promise<number>
       if (rule.endDate && isAfter(cursor, rule.endDate)) break;
       const skipped = rule.skippedDates.some((d) => isSameDay(d, cursor));
       if (!skipped) {
-        // For CREDIT_PAYMENT: use actual credit card balance instead of fixed amount
+        // For CREDIT_PAYMENT: use actual credit card balance instead of fixed amount.
+        // For LOAN_PAYMENT: cap the recurring payment to outstanding principal.
         let paymentAmount = rule.amount;
         if (rule.type === "CREDIT_PAYMENT" && rule.toAccountId) {
           const { computeAccountBalance } = await import("@/lib/finance/balances");
@@ -89,6 +90,17 @@ export async function materializeDueRecurring(now = new Date()): Promise<number>
             paymentAmount = creditBalance as any; // Decimal compatible
           } else {
             // No balance due — skip this occurrence
+            cursor = nextOccurrence(cursor, rule.frequency, rule.interval);
+            safety += 1;
+            continue;
+          }
+        }
+        if (rule.type === "LOAN_PAYMENT" && rule.toAccountId) {
+          const { computeAccountBalance } = await import("@/lib/finance/balances");
+          const loanBalance = await computeAccountBalance(rule.toAccountId);
+          if (loanBalance.greaterThan(0)) {
+            paymentAmount = loanBalance.lessThan(rule.amount) ? (loanBalance as any) : rule.amount;
+          } else {
             cursor = nextOccurrence(cursor, rule.frequency, rule.interval);
             safety += 1;
             continue;

@@ -125,6 +125,16 @@ export interface DashboardData {
     holdingsCount: number;
     byType: Record<string, number>;
   };
+  maturedHoldings: Array<{
+    id: string;
+    name: string;
+    assetClass: string;
+    type: "BOND" | "FIXED_DEPOSIT";
+    accountName: string;
+    maturityDate: string | null;
+    principal: number;
+    interestFreq: string | null;
+  }>;
 }
 
 export function useDashboard(query: string = "") {

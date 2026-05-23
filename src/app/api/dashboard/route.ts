@@ -15,7 +15,7 @@ import { getPortfolioSummary } from "@/lib/services/investments";
 import { runAllNotifications } from "@/lib/services/notifications";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
-import { addDays } from "date-fns";
+import { addDays, endOfDay } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +74,20 @@ export async function GET(req: NextRequest) {
       totalPnlPercent: 0,
       holdings: [],
     }));
+    const maturedHoldings = await prisma.holding.findMany({
+      where: {
+        archived: false,
+        maturityDate: { lte: endOfDay(new Date()) },
+        OR: [
+          { type: "BOND" },
+          { type: "FIXED_DEPOSIT" },
+          { assetClass: "RECURRING_DEPOSIT" },
+        ],
+      },
+      orderBy: { maturityDate: "asc" },
+      take: 5,
+      include: { account: true },
+    });
     const creditObligations = creditAccounts
       .map((a) => {
         const bal = netWorth.byAccount.find((b) => b.accountId === a.id)?.balance.toFixed(2) ?? "0.00";
@@ -142,6 +156,21 @@ export async function GET(req: NextRequest) {
           return acc;
         }, {}),
       },
+      maturedHoldings: maturedHoldings.map((h) => {
+        const principal = h.principalAmount
+          ? Number(h.principalAmount)
+          : Number(h.units) * Number(h.avgBuyPrice);
+        return {
+          id: h.id,
+          name: h.name,
+          assetClass: h.assetClass,
+          type: h.type,
+          accountName: h.account.name,
+          maturityDate: h.maturityDate?.toISOString() ?? null,
+          principal,
+          interestFreq: h.interestFreq,
+        };
+      }),
     });
   } catch (e) {
     return handleError(e);

@@ -197,6 +197,7 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           accountId: values.accountId,
           interestRate: values.interestRate ? Number(values.interestRate) : undefined,
           interestFreq: values.interestFreq || "YEARLY",
+          maturityDate: values.maturityDate || undefined,
           applyCharges: false, skipTransaction,
         });
         toast.success(isPF ? "PF balance recorded" : "RD recorded");
@@ -229,6 +230,35 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
       return;
     }
 
+    // One-time fixed income: bonds and fixed deposits are entered as a single amount.
+    if (isFixedIncome) {
+      if (!values.units || Number(values.units) <= 0) { toast.error("Enter valid amount"); return; }
+      try {
+        await postJson("/api/investments", {
+          type,
+          assetClass: values.assetClass,
+          symbol: values.symbol || values.name.replace(/\s+/g, "-").toUpperCase(),
+          name: values.name,
+          units: values.units,
+          pricePerUnit: 1,
+          occurredAt: values.occurredAt,
+          accountId: values.accountId,
+          notes: values.notes || undefined,
+          interestRate: values.interestRate ? Number(values.interestRate) : undefined,
+          interestFreq: values.interestFreq,
+          maturityDate: values.maturityDate || undefined,
+          applyCharges: false,
+          skipTransaction,
+        });
+        toast.success("Investment recorded");
+        onOpenChange(false);
+        mutate("/api/investments");
+        mutate("/api/recurring");
+        mutate((key) => typeof key === "string" && (key.startsWith("/api/accounts") || key.startsWith("/api/dashboard")), undefined, { revalidate: true });
+      } catch (e) { toast.error(e instanceof Error ? e.message : "Failed"); }
+      return;
+    }
+
     // Standard: stocks, MF, ETF, bonds, FD
     if (needsSearch && !values.symbol) { toast.error("Search and select an instrument"); return; }
     if (!values.units || Number(values.units) <= 0) { toast.error("Enter valid units/amount"); return; }
@@ -246,8 +276,8 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
         accountId: values.accountId,
         notes: values.notes || undefined,
         interestRate: values.interestRate ? Number(values.interestRate) : undefined,
-        interestFreq: isFixedIncome ? values.interestFreq : undefined,
-        maturityDate: isFixedIncome ? values.maturityDate : undefined,
+          interestFreq: undefined,
+          maturityDate: undefined,
         applyCharges: type === "STOCK" && !skipTransaction,
         skipTransaction,
       });
@@ -349,7 +379,7 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           )}
 
           {/* One-time: units + price */}
-          {!isRecurring && !isPForRD && (
+          {!isRecurring && !isPForRD && !isFixedIncome && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>{isCommodity ? "Weight (grams)" : isFixedIncome ? "Amount" : "Units"}</Label>
@@ -373,6 +403,15 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                 </div>
                 {isFixedIncome && <p className="text-[10px] text-muted-foreground">For FDs/Bonds: amount above, enter 1 here.</p>}
               </div>
+            </div>
+          )}
+
+          {/* Fixed income one-time: just amount */}
+          {!isRecurring && isFixedIncome && (
+            <div className="space-y-1.5">
+              <Label>Amount</Label>
+              <Input inputMode="decimal" placeholder="100000" {...form.register("units")} />
+              <p className="text-[10px] text-muted-foreground">Principal invested in this bond or fixed deposit.</p>
             </div>
           )}
 

@@ -2,7 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { Decimal } from "decimal.js";
 import { toMoney, ZERO } from "@/lib/money";
 import { calculateCharges, type ChargeRates, DEFAULT_CHARGE_RATES } from "@/lib/finance/trading-charges";
-import type { InvestmentType, TradeAction } from "@prisma/client";
+import { nextOccurrence } from "@/lib/finance/dates";
+import type { Holding, InvestmentType, TradeAction } from "@prisma/client";
 
 // ─── Charge settings from settings ─────────────────────────────────────
 
@@ -129,6 +130,19 @@ export async function buyInvestment(input: BuyInput) {
     });
   }
 
+  if (isInterestBearingHolding(holding)) {
+    const principal = Number(holding.units) * Number(holding.avgBuyPrice);
+    holding = await prisma.holding.update({
+      where: { id: holding.id },
+      data: {
+        interestRate: input.interestRate !== undefined ? input.interestRate.toFixed(4) : holding.interestRate,
+        interestFreq: input.interestFreq ?? holding.interestFreq,
+        maturityDate: input.maturityDate ?? holding.maturityDate,
+        principalAmount: principal.toFixed(2),
+      },
+    });
+  }
+
   // Create transaction (money leaves the account) — skip for existing holdings migration
   let txn = null;
   if (!input.skipTransaction) {
@@ -160,7 +174,106 @@ export async function buyInvestment(input: BuyInput) {
     },
   });
 
+  await syncFixedIncomeInterestRule(holding.id, input.occurredAt);
+
   return { holding, trade, transaction: txn, charges };
+}
+
+async function syncFixedIncomeInterestRule(holdingId: string, fallbackStartDate: Date) {
+  const holding = await prisma.holding.findUnique({ where: { id: holdingId } });
+  if (!holding || !isInterestBearingHolding(holding)) return;
+  if (!holding.interestRate || !holding.interestFreq || holding.interestFreq === "ON_MATURITY") return;
+
+  const schedule = interestSchedule(holding.interestFreq);
+  const principal = holding.principalAmount
+    ? Number(holding.principalAmount)
+    : Number(holding.units) * Number(holding.avgBuyPrice);
+  const annualRate = Number(holding.interestRate);
+  const payoutAmount = round2((principal * annualRate) / 100 / schedule.periodsPerYear);
+  if (payoutAmount <= 0) return;
+
+  const startDate = nextOccurrence(fallbackStartDate, schedule.frequency, schedule.interval);
+  const name = `Interest: ${holding.name}`;
+  const description = `Interest payout from ${holding.name}`;
+
+  if (holding.sipRuleId) {
+    await prisma.recurringRule.update({
+      where: { id: holding.sipRuleId },
+      data: {
+        name,
+        type: "INCOME",
+        amount: payoutAmount.toFixed(2),
+        frequency: schedule.frequency,
+        interval: schedule.interval,
+        description,
+        accountId: holding.accountId,
+        toAccountId: null,
+        categoryId: null,
+        endDate: holding.maturityDate ?? null,
+      },
+    }).catch(async () => {
+      await createFixedIncomeInterestRule(holding, payoutAmount, startDate, schedule, name, description);
+    });
+    return;
+  }
+
+  await createFixedIncomeInterestRule(holding, payoutAmount, startDate, schedule, name, description);
+}
+
+export async function syncHoldingInterestRule(holdingId: string, fallbackStartDate = new Date()) {
+  return syncFixedIncomeInterestRule(holdingId, fallbackStartDate);
+}
+
+async function createFixedIncomeInterestRule(
+  holding: Holding,
+  payoutAmount: number,
+  startDate: Date,
+  schedule: { frequency: "MONTHLY" | "YEARLY"; interval: number },
+  name: string,
+  description: string
+) {
+  const rule = await prisma.recurringRule.create({
+    data: {
+      name,
+      type: "INCOME",
+      amount: payoutAmount.toFixed(2),
+      frequency: schedule.frequency,
+      interval: schedule.interval,
+      startDate,
+      nextRunDate: startDate,
+      endDate: holding.maturityDate ?? null,
+      description,
+      accountId: holding.accountId,
+    },
+  });
+
+  await prisma.holding.update({
+    where: { id: holding.id },
+    data: { sipRuleId: rule.id },
+  });
+}
+
+function isInterestBearingHolding(holding: Pick<Holding, "type" | "assetClass">) {
+  return holding.type === "BOND" || holding.type === "FIXED_DEPOSIT" || holding.assetClass === "RECURRING_DEPOSIT";
+}
+
+function interestSchedule(freq: NonNullable<BuyInput["interestFreq"]>): {
+  frequency: "MONTHLY" | "YEARLY";
+  interval: number;
+  periodsPerYear: number;
+} {
+  switch (freq) {
+    case "MONTHLY":
+      return { frequency: "MONTHLY", interval: 1, periodsPerYear: 12 };
+    case "QUARTERLY":
+      return { frequency: "MONTHLY", interval: 3, periodsPerYear: 4 };
+    case "HALF_YEARLY":
+      return { frequency: "MONTHLY", interval: 6, periodsPerYear: 2 };
+    case "YEARLY":
+      return { frequency: "YEARLY", interval: 1, periodsPerYear: 1 };
+    case "ON_MATURITY":
+      return { frequency: "YEARLY", interval: 1, periodsPerYear: 1 };
+  }
 }
 
 // ─── Sell stock/MF ─────────────────────────────────────────────────────
@@ -200,6 +313,13 @@ export async function sellInvestment(input: SellInput) {
       archived: remainingUnits.isZero(),
     },
   });
+
+  if (remainingUnits.isZero() && holding.sipRuleId && isInterestBearingHolding(holding)) {
+    await prisma.recurringRule.update({
+      where: { id: holding.sipRuleId },
+      data: { status: "ENDED" },
+    }).catch(() => {});
+  }
 
   // Create transaction (money comes back to account)
   const txn = await prisma.transaction.create({
@@ -273,7 +393,7 @@ export async function recordDividendOrInterest(holdingId: string, amount: number
 export async function getPortfolioSummary() {
   const holdings = await prisma.holding.findMany({
     where: { archived: false },
-    include: { account: true, trades: { orderBy: { occurredAt: "desc" }, take: 5 } },
+    include: { account: true, trades: { orderBy: { occurredAt: "asc" } } },
   });
 
   let totalInvested = ZERO;
@@ -310,6 +430,7 @@ export async function getPortfolioSummary() {
       interestRate: h.interestRate ? Number(h.interestRate) : null,
       interestFreq: h.interestFreq,
       maturityDate: h.maturityDate?.toISOString() ?? null,
+      purchaseDate: h.trades.find((t) => t.action === "BUY" || t.action === "SIP_BUY")?.occurredAt.toISOString() ?? h.createdAt.toISOString(),
       tags: h.tags ?? [],
     };
   });
