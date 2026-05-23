@@ -13,7 +13,16 @@ import { navItems } from "./nav-config";
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = React.useState(true);
+  const [collapsed, setCollapsed] = React.useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("finarc_sidebar");
+      return saved !== null ? saved === "collapsed" : true;
+    }
+    return true;
+  });
+  React.useEffect(() => {
+    localStorage.setItem("finarc_sidebar", collapsed ? "collapsed" : "expanded");
+  }, [collapsed]);
 
   return (
     <aside className={cn(
