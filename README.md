@@ -1,79 +1,82 @@
 # Finarc — Personal Finance Hub
 
-A self-hosted, modern personal finance operating system. Tracks accounts as ledger entities, enforces correct credit/loan logic, and surfaces actionable analytics across budgets, cash flow, and obligations.
+A self-hosted, modern personal finance operating system. Track accounts, budgets, investments (stocks, MF, ETF, gold, bonds, FD, PF), credit cards, loans, recurring payments, and dues — all in one place.
 
-## Stack
+## One-Click Deploy to Vercel
 
-- Next.js 14 (App Router, RSC, standalone build)
-- TypeScript, React 18, Tailwind CSS, shadcn/ui (Radix primitives)
-- Prisma ORM + PostgreSQL
-- decimal.js for money math, Zod for validation
-- SWR + react-hook-form
-- Recharts for analytics
-- Docker for deployment
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FYOUR_USERNAME%2Ffinarc&env=DATABASE_URL&envDescription=PostgreSQL%20connection%20string.%20Get%20a%20free%20DB%20from%20neon.tech&envLink=https%3A%2F%2Fneon.tech&project-name=finarc&repository-name=finarc)
 
-## Run with Docker (recommended)
+### Steps:
+1. Click the button above
+2. Get a free PostgreSQL database from [neon.tech](https://neon.tech) (takes 30 seconds)
+3. Paste the connection string as `DATABASE_URL` when Vercel asks
+4. Deploy — the schema is applied automatically during build
+5. Open your app — default PIN is `123456`
+
+That's it. No commands needed.
+
+---
+
+## Self-Host with Docker
 
 ```bash
+git clone https://github.com/YOUR_USERNAME/finarc.git
+cd finarc
 docker compose up --build
 ```
 
-Then open http://localhost:3000.
+Opens at http://localhost:3000. PostgreSQL included. Default PIN: `123456`.
 
-The first run applies migrations automatically. Seed the default categories with:
+---
 
-```bash
-docker compose exec app sh -c "npx tsx prisma/seed.ts"
-```
-
-## Run locally
+## Run Locally (Development)
 
 ```bash
-cp .env.example .env   # adjust DATABASE_URL if needed
+# Prerequisites: Node.js 18+, PostgreSQL running
+cp .env.example .env   # edit DATABASE_URL if needed
 npm install
-npx prisma migrate dev --name init
-npm run db:seed         # optional default categories
+npm run db:push
+npm run db:seed        # optional: adds default categories
 npm run dev
 ```
 
-## Modules
+---
 
-- **Dashboard** — net worth, cash flow trend, category breakdown, account distribution, budget health, credit obligations, recent activity, upcoming recurring transactions, with Week / Month / Year / Custom range filters.
-- **Accounts** — Savings, Cash, Credit, Loan, Investment. Ledger semantics: balances flow from transactions only.
-- **Transactions** — Income, Expense, Transfer, Credit payment, Loan payment. Filtering by type, account, and free-text search.
-- **Budgets** — Custom categories, weekly / monthly / yearly periods, healthy / near-limit / over-budget status.
-- **Investments** — Preview module with dashboard placement reserved for Phase 3.
-- **Reports** — Trend, category, account, and budget reporting with date ranges.
-- **Settings** — Theme, preferences, JSON backup export, and import.
+## Stack
 
-## Financial logic highlights
+- Next.js 14 (App Router) · TypeScript · React 18
+- Tailwind CSS · shadcn/ui (Radix primitives)
+- Prisma ORM · PostgreSQL
+- Recharts · SWR · react-hook-form · Zod
+- decimal.js for money math
+- yahoo-finance2 (stocks) · mfapi.in (mutual funds) · gold-api.com (gold/silver)
+- Telegram Bot API (notifications + transaction input)
+- OpenAI / Ollama (AI assistant)
+- PWA (installable on mobile)
+- Docker for self-hosting
 
-- Account balances are derived from the immutable transaction ledger plus an opening balance. Manual balance editing after creation is intentionally disabled to keep the ledger consistent.
-- Credit purchases create a single expense (consumes the budget category) and increase the credit liability. Credit payments move money from an asset to the credit account without creating a duplicate expense.
-- Loan payments move from an asset to the loan account, reducing the principal owed.
-- Transfers do not affect budgets, income, or expense metrics.
-- Recurring rules support skip and pause; each occurrence materializes as a real transaction.
+## Features
 
-## Project structure
+- **Dashboard** — Net worth, cash flow, budget health, credit obligations, portfolio widget
+- **Accounts** — Savings, Cash, Credit, Loan, Investment (ledger-style balances)
+- **Transactions** — Income, Expense, Transfer, Credit/Loan payments, tax deductible flag
+- **Investments** — Stocks, MF, ETF, Gold, Silver, Bonds, FD, PF, Recurring Deposits
+- **Budgets** — Weekly/Monthly/Yearly with status indicators
+- **Recurring** — Auto-materialize, SIP, EMI, credit card auto-pay (actual balance)
+- **Dues** — Track money lent/borrowed with settlement flow
+- **Reports** — Trends, categories, net worth history, cash flow waterfall, distribution
+- **AI Chat** — OpenAI or Ollama powered financial assistant
+- **Telegram Bot** — Notifications + natural language transaction recording
+- **Settings** — Currency, theme, PIN, trading charges, backup/restore, CSV export
 
-```
-src/
-  app/               # Next.js routes (pages + API)
-  components/
-    ui/              # shadcn primitives (button, card, dialog, ...)
-    dashboard/
-    transactions/
-    accounts/
-    budgets/
-    categories/
-    layout/          # sidebar, top bar, mobile bottom nav, FAB
-  hooks/             # SWR data hooks
-  lib/
-    finance/         # balances, budgets, analytics, dates, recurring
-    services/        # write-side business logic
-    money.ts         # decimal-safe math
-    validators.ts    # zod schemas (single source of truth)
-prisma/
-  schema.prisma
-  seed.ts
-```
+## Default PIN
+
+`123456` — change it in Settings → Preferences after first login.
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+
+All other config (Telegram, OpenAI, currency, etc.) is managed through the Settings UI.

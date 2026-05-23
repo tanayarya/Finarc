@@ -92,3 +92,21 @@
   background: hsl(var(--border));
   border-radius: 6px;
 }
+
+/* Recharts tooltip fix for dark mode */
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: hsl(var(--popover)) !important;
+  border-color: hsl(var(--border)) !important;
+  border-radius: 8px !important;
+}
+.recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-label {
+  color: hsl(var(--popover-foreground)) !important;
+}
+.recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item {
+  color: hsl(var(--popover-foreground)) !important;
+}
+.recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item-name,
+.recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item-separator,
+.recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item-value {
+  color: hsl(var(--popover-foreground)) !important;
+}
