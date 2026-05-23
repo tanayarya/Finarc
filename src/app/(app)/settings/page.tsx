@@ -441,6 +441,7 @@ function TelegramSettings() {
     botToken: string;
     chatId: string;
     configured: boolean;
+    webhookUrl: string;
     notifications: { creditDue: boolean; budgetExceeded: boolean; recurringDue: boolean; lowBalance: boolean; botInput: boolean };
   }>("/api/telegram/config");
 
@@ -523,22 +524,24 @@ function TelegramSettings() {
             <div className="space-y-2 border-t pt-3 mt-3">
               <p className="text-xs font-medium">Webhook setup (for bot input)</p>
               <p className="text-[10px] text-muted-foreground">
-                To receive messages from Telegram, set your webhook URL. After deploying, enter your public URL below and click Setup.
+                To receive messages from Telegram, set your webhook URL. Use your Vercel URL or Tailscale Funnel URL.
               </p>
               <div className="flex gap-2">
                 <Input
-                  placeholder="https://your-domain.com/api/telegram/webhook"
+                  placeholder="https://your-app.vercel.app/api/telegram/webhook"
                   className="h-8 text-xs flex-1"
                   id="webhook-url"
+                  defaultValue={config?.webhookUrl ?? ""}
                 />
                 <Button variant="outline" size="sm" className="h-8 text-xs" onClick={async () => {
                   const url = (document.getElementById("webhook-url") as HTMLInputElement)?.value;
                   if (!url) { toast.error("Enter webhook URL"); return; }
                   const res = await fetch("/api/telegram/setup-webhook", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ webhookUrl: url }) });
-                  if (res.ok) toast.success("Webhook registered");
+                  if (res.ok) { toast.success("Webhook registered"); mutateConfig(); }
                   else { const err = await res.json().catch(() => ({})); toast.error(err?.error?.message ?? "Failed"); }
                 }}>Setup</Button>
               </div>
+              {config?.webhookUrl && <p className="text-[10px] text-emerald-600">Active: {config.webhookUrl}</p>}
             </div>
           )}
         </CardContent>

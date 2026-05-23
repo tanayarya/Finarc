@@ -13,11 +13,13 @@ export async function GET() {
     const notifyRecurring = (await prisma.appSetting.findUnique({ where: { key: "notifyRecurringDue" } }))?.value === "true";
     const notifyLowBalance = (await prisma.appSetting.findUnique({ where: { key: "notifyLowBalance" } }))?.value === "true";
     const botInput = (await prisma.appSetting.findUnique({ where: { key: "telegramBotInput" } }))?.value === "true";
+    const webhookUrl = (await prisma.appSetting.findUnique({ where: { key: "telegramWebhookUrl" } }))?.value ?? "";
 
     return ok({
       botToken: botToken ? "••••" + botToken.slice(-6) : "",
       chatId,
       configured: Boolean(botToken && chatId),
+      webhookUrl,
       notifications: { creditDue: notifyCredit, budgetExceeded: notifyBudget, recurringDue: notifyRecurring, lowBalance: notifyLowBalance, botInput },
     });
   } catch (e) {
