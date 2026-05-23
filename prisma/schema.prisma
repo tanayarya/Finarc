@@ -1,0 +1,334 @@
+// Finarc — Personal Finance Hub
+// Prisma schema modeling accounts as ledger entities,
+// transactions as the single source of truth for balances,
+// budgets, recurring rules, and credit/loan liabilities.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ─────────────────────────────────────────────────────────────
+
+enum AccountType {
+  SAVINGS
+  CASH
+  CREDIT
+  LOAN
+  INVESTMENT
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+  CREDIT_PAYMENT
+  LOAN_PAYMENT
+}
+
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum RecurrenceStatus {
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum BudgetPeriod {
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum CategoryKind {
+  INCOME
+  EXPENSE
+}
+
+// ─── Models ────────────────────────────────────────────────────────────
+
+model Account {
+  id              String      @id @default(cuid())
+  name            String
+  type            AccountType
+  currency        String      @default("USD")
+  // Opening balance recorded at creation. After creation, balance changes
+  // exclusively through transactions (ledger-style).
+  openingBalance  Decimal     @default(0) @db.Decimal(18, 2)
+  // Credit-specific fields
+  creditLimit     Decimal?    @db.Decimal(18, 2)
+  statementDay    Int?        // 1-28
+  dueDay          Int?        // 1-28
+  // Loan-specific fields
+  loanPrincipal   Decimal?    @db.Decimal(18, 2)
+  loanStartDate   DateTime?
+  loanEndDate     DateTime?
+  // Investment placeholder
+  institution     String?
+  notes           String?
+  archived        Boolean     @default(false)
+  color           String?
+  icon            String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  transactions       Transaction[] @relation("AccountTxns")
+  transferOut        Transaction[] @relation("TransferFrom")
+  transferIn         Transaction[] @relation("TransferTo")
+  recurringRules     RecurringRule[] @relation("RecurringAccount")
+  recurringTransfers RecurringRule[] @relation("RecurringToAccount")
+  holdings           Holding[]
+  dues               Due[]
+
+  @@index([type])
+  @@index([archived])
+}
+
+model Category {
+  id        String       @id @default(cuid())
+  name      String
+  kind      CategoryKind
+  color     String?
+  icon      String?
+  archived  Boolean      @default(false)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  transactions   Transaction[]
+  budgets        Budget[]
+  recurringRules RecurringRule[]
+
+  @@unique([name, kind])
+  @@index([kind])
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  type        TransactionType
+  amount      Decimal         @db.Decimal(18, 2)
+  occurredAt  DateTime
+  description String?
+  notes       String?
+
+  // For INCOME / EXPENSE / CREDIT_PAYMENT / LOAN_PAYMENT
+  accountId   String?
+  account     Account?  @relation("AccountTxns", fields: [accountId], references: [id], onDelete: Restrict)
+
+  // For TRANSFER, CREDIT_PAYMENT, LOAN_PAYMENT
+  fromAccountId String?
+  fromAccount   Account? @relation("TransferFrom", fields: [fromAccountId], references: [id], onDelete: Restrict)
+  toAccountId   String?
+  toAccount     Account? @relation("TransferTo", fields: [toAccountId], references: [id], onDelete: Restrict)
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  recurringRuleId String?
+  recurringRule   RecurringRule? @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
+
+  taxDeductible   Boolean     @default(false)
+
+  trade           Trade?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([occurredAt])
+  @@index([accountId])
+  @@index([categoryId])
+}
+
+model RecurringRule {
+  id          String              @id @default(cuid())
+  name        String
+  type        TransactionType
+  amount      Decimal             @db.Decimal(18, 2)
+  frequency   RecurrenceFrequency
+  interval    Int                 @default(1)
+  startDate   DateTime
+  endDate     DateTime?
+  nextRunDate DateTime
+  status      RecurrenceStatus    @default(ACTIVE)
+  description String?
+
+  accountId   String?
+  account     Account? @relation("RecurringAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  toAccountId String?
+  toAccount   Account? @relation("RecurringToAccount", fields: [toAccountId], references: [id], onDelete: SetNull)
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  skippedDates DateTime[]
+
+  generatedTransactions Transaction[]
+  sipHoldings           Holding[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([nextRunDate])
+}
+
+model Budget {
+  id         String       @id @default(cuid())
+  name       String
+  categoryId String
+  category   Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  amount     Decimal      @db.Decimal(18, 2)
+  period     BudgetPeriod
+  startDate  DateTime
+  archived   Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@unique([categoryId, period])
+  @@index([archived])
+}
+
+model AppSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Investment Enums ──────────────────────────────────────────────────
+
+enum InvestmentType {
+  STOCK
+  MUTUAL_FUND
+  BOND
+  FIXED_DEPOSIT
+  PROVIDENT_FUND
+  COMMODITY
+}
+
+enum TradeAction {
+  BUY
+  SELL
+  SIP_BUY
+  DIVIDEND
+  INTEREST
+  MATURITY
+}
+
+enum InterestFrequency {
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY
+  ON_MATURITY
+}
+
+// ─── Investment Models ─────────────────────────────────────────────────
+
+model Holding {
+  id              String         @id @default(cuid())
+  type            InvestmentType
+  // Asset class for chart grouping (STOCKS_INDIA, STOCKS_US, ETF, MUTUAL_FUND, GOLD, SILVER, BOND, FIXED_DEPOSIT, PROVIDENT_FUND)
+  assetClass      String         @default("STOCKS_INDIA")
+  // Ticker for stocks (e.g. RELIANCE.NS), scheme code for MF, name for bonds/FD
+  symbol          String
+  name            String
+  // Current units held (updated on buy/sell)
+  units           Decimal        @default(0) @db.Decimal(18, 6)
+  // Average buy price (weighted average, updated on each buy)
+  avgBuyPrice     Decimal        @default(0) @db.Decimal(18, 4)
+  // Last fetched market price
+  currentPrice    Decimal?       @db.Decimal(18, 4)
+  lastPriceUpdate DateTime?
+  // Linked account (money flows from/to this account)
+  accountId       String
+  account         Account        @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  // Bond/FD specific
+  interestRate    Decimal?       @db.Decimal(6, 4) // e.g. 7.5000 for 7.5%
+  interestFreq    InterestFrequency?
+  maturityDate    DateTime?
+  principalAmount Decimal?       @db.Decimal(18, 2)
+  // MF SIP
+  sipRuleId       String?
+  sipRule         RecurringRule? @relation(fields: [sipRuleId], references: [id], onDelete: SetNull)
+
+  archived        Boolean        @default(false)
+  tags            String[]       @default([])
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  trades          Trade[]
+
+  @@index([type])
+  @@index([symbol])
+  @@index([accountId])
+}
+
+model Trade {
+  id          String      @id @default(cuid())
+  holdingId   String
+  holding     Holding     @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  action      TradeAction
+  units       Decimal     @db.Decimal(18, 6)
+  price       Decimal     @db.Decimal(18, 4) // price per unit
+  amount      Decimal     @db.Decimal(18, 2) // total amount (units * price)
+  // Charges breakdown
+  charges     Decimal     @default(0) @db.Decimal(18, 2) // total charges deducted
+  chargesJson String?     // JSON breakdown: { stt, exchangeTxn, sebi, stampDuty, gst, brokerage }
+  // Net amount actually debited/credited to account
+  netAmount   Decimal     @db.Decimal(18, 2)
+  occurredAt  DateTime
+  notes       String?
+  // Link to the generated transaction (for account balance tracking)
+  transactionId String?   @unique
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime    @default(now())
+
+  @@index([holdingId])
+  @@index([occurredAt])
+}
+
+// ─── Dues / Receivables ────────────────────────────────────────────────
+
+enum DueType {
+  RECEIVABLE
+  PAYABLE
+}
+
+enum DueStatus {
+  PENDING
+  PARTIAL
+  SETTLED
+}
+
+model Due {
+  id             String    @id @default(cuid())
+  type           DueType
+  personName     String
+  amount         Decimal   @db.Decimal(18, 2)
+  amountSettled  Decimal   @default(0) @db.Decimal(18, 2)
+  description    String?
+  dueDate        DateTime?
+  accountId      String
+  account        Account   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  status         DueStatus @default(PENDING)
+  settledAt      DateTime?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status])
+  @@index([type])
+  @@index([dueDate])
+}

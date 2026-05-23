@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: finarc
+      POSTGRES_PASSWORD: finarc
+      POSTGRES_DB: finarc
+    volumes:
+      - finarc-db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finarc -d finarc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://finarc:finarc@db:5432/finarc?schema=public
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    command: sh -c "npx prisma migrate deploy && node server.js"
+
+volumes:
+  finarc-db:
