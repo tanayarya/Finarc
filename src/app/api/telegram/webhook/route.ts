@@ -238,10 +238,10 @@ async function handleAIQuery(botToken: string, chatId: string, query: string) {
       body: JSON.stringify({
         model: openaiModel,
         messages: [
-          { role: "system", content: `You are Finarc AI, a personal finance assistant. Answer concisely in plain text (no markdown). Data:\n${context}` },
+          { role: "system", content: `You are Finarc AI, a personal finance assistant responding via Telegram. Rules:\n- Keep responses SHORT (max 3-4 lines)\n- Use plain text only, no markdown\n- Give direct numbers and facts\n- Don't explain what you can't do, just answer what you can\n- Format amounts clearly\n- If asked about investments, show: name, buy price, current value if available\n- Never say "based on the data provided" or similar filler\n\nUser's financial data:\n${context}` },
           { role: "user", content: query },
         ],
-        max_tokens: 500,
+        max_tokens: 300,
         temperature: 0.7,
       }),
     });

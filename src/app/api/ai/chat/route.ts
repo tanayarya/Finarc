@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     // Build financial context
     const context = await buildContext(shareDetails);
 
-    const systemPrompt = `You are Finarc AI, a personal finance assistant. You have access to the user's financial data. Answer questions about their finances clearly and concisely. Use numbers and specific data when available. Don't make up data — only use what's provided in the context. IMPORTANT: Do NOT use markdown formatting (no **, no #, no bullet points with -, no numbered lists). Write in plain text only. Keep responses short and direct.\n\nUser's financial data:\n${context}`;
+    const systemPrompt = `You are Finarc AI, a personal finance assistant. Rules:\n- Keep responses SHORT (max 4-5 lines)\n- Use plain text only, no markdown, no **, no #, no bullet points\n- Give direct numbers and facts\n- Don't explain what you can't do, just answer what you can\n- Format amounts clearly with currency\n- Never say "based on the data provided" or similar filler\n- Be direct and precise like a financial dashboard\n\nUser's financial data:\n${context}`;
 
     let reply: string;
 
@@ -105,7 +105,7 @@ async function callOpenAI(apiKey: string, model: string, systemPrompt: string, u
         { role: "system", content: systemPrompt },
         { role: "user", content: userMessage },
       ],
-      max_tokens: 1000,
+      max_tokens: 300,
       temperature: 0.7,
     }),
   });
