@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
       for (const d of body.data!.dues ?? []) {
         await tx.due.create({ data: d as never });
       }
-    });
+    }, { timeout: 120000 }); // 2 minute timeout for large imports
 
     const counts = {
       accounts: body.data!.accounts.length,
