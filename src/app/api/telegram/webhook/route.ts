@@ -298,9 +298,16 @@ async function handleAIQuery(botToken: string, chatId: string, query: string) {
     for (const t of txns) context += `- ${t.occurredAt.toISOString().slice(0, 10)} ${t.type} ${t.amount} ${t.description ?? ""} [${t.category?.name ?? ""}]\n`;
   } else {
     const thisMonth = new Date(); thisMonth.setDate(1);
-    const txns = await prisma.transaction.findMany({ where: { occurredAt: { gte: thisMonth } }, select: { type: true, amount: true } });
+    const txns = await prisma.transaction.findMany({
+      where: { occurredAt: { gte: thisMonth } },
+      select: { type: true, amount: true, account: { select: { type: true } }, trade: { select: { id: true } } },
+    });
     let inc = 0, exp = 0;
-    for (const t of txns) { if (t.type === "INCOME") inc += Number(t.amount); if (t.type === "EXPENSE") exp += Number(t.amount); }
+    for (const t of txns) {
+      if (t.trade) continue;
+      if (t.type === "INCOME" && t.account?.type !== "CREDIT") inc += Number(t.amount);
+      if (t.type === "EXPENSE") exp += Number(t.amount);
+    }
     context += `\nTHIS MONTH: Income=${inc.toFixed(0)}, Expenses=${exp.toFixed(0)}, Net=${(inc - exp).toFixed(0)}\n`;
   }
 

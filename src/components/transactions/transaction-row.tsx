@@ -17,9 +17,12 @@ const ICONS = {
 
 export function TransactionRow({ tx }: { tx: TxRow }) {
   const Icon = ICONS[tx.type];
+  const isInvestmentFlow = Boolean(tx.trade);
   const sign = tx.type === "INCOME" ? "+" : tx.type === "EXPENSE" ? "-" : "";
   const tone =
-    tx.type === "INCOME"
+    isInvestmentFlow
+      ? "text-foreground"
+      : tx.type === "INCOME"
       ? "text-emerald-600 dark:text-emerald-400"
       : tx.type === "EXPENSE"
         ? "text-rose-600 dark:text-rose-400"
@@ -34,6 +37,7 @@ export function TransactionRow({ tx }: { tx: TxRow }) {
 
   const subtitle = (() => {
     if (tx.type === "INCOME" || tx.type === "EXPENSE") {
+      if (isInvestmentFlow) return [tx.account?.name, tx.trade?.holding?.name].filter(Boolean).join(" · ");
       return [tx.account?.name, tx.category?.name].filter(Boolean).join(" · ");
     }
     if (tx.type === "TRANSFER" || tx.type === "CREDIT_PAYMENT" || tx.type === "LOAN_PAYMENT") {
@@ -49,7 +53,7 @@ export function TransactionRow({ tx }: { tx: TxRow }) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">
-          {tx.description || labelFor(tx.type)}
+          {tx.description || labelFor(tx)}
         </p>
         <p className="truncate text-xs text-muted-foreground">
           {format(new Date(tx.occurredAt), "MMM d, yyyy")} · {subtitle}
@@ -60,9 +64,9 @@ export function TransactionRow({ tx }: { tx: TxRow }) {
           {sign}
           {formatCurrency(tx.amount, currency)}
         </span>
-        {tx.type !== "INCOME" && tx.type !== "EXPENSE" ? (
+        {isInvestmentFlow || tx.type !== "INCOME" && tx.type !== "EXPENSE" ? (
           <Badge variant="muted" className="text-[10px]">
-            {labelFor(tx.type)}
+            {labelFor(tx)}
           </Badge>
         ) : null}
       </div>
@@ -70,7 +74,13 @@ export function TransactionRow({ tx }: { tx: TxRow }) {
   );
 }
 
-function labelFor(t: TxRow["type"]) {
+function labelFor(tx: TxRow | TxRow["type"]) {
+  if (typeof tx !== "string" && tx.trade) {
+    if (tx.trade.action === "SELL" || tx.trade.action === "MATURITY") return "Investment redemption";
+    if (tx.trade.action === "DIVIDEND" || tx.trade.action === "INTEREST") return "Investment income";
+    return "Investment buy";
+  }
+  const t = typeof tx === "string" ? tx : tx.type;
   return {
     INCOME: "Income",
     EXPENSE: "Expense",

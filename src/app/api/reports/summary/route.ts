@@ -27,10 +27,9 @@ export async function GET(req: NextRequest) {
       incomeExpenseSeries(range),
       categoryBreakdown(range),
       computeBudgetProgress(),
-      prisma.transaction.groupBy({
-        by: ["accountId", "type"],
-        _sum: { amount: true },
+      prisma.transaction.findMany({
         where: { occurredAt: { gte: range.from, lte: range.to }, accountId: { not: null } },
+        select: { accountId: true, type: true, amount: true, account: { select: { type: true } }, trade: { select: { id: true } } },
       }),
     ]);
 
@@ -39,10 +38,11 @@ export async function GET(req: NextRequest) {
 
     const accountPerformance = Array.from(
       byAccount.reduce<Map<string, { income: number; expense: number }>>((acc, row) => {
+        if (row.trade) return acc;
         const id = row.accountId!;
         const cur = acc.get(id) ?? { income: 0, expense: 0 };
-        if (row.type === "INCOME") cur.income += Number(row._sum.amount ?? 0);
-        if (row.type === "EXPENSE") cur.expense += Number(row._sum.amount ?? 0);
+        if (row.type === "INCOME" && row.account?.type !== "CREDIT") cur.income += Number(row.amount);
+        if (row.type === "EXPENSE") cur.expense += Number(row.amount);
         acc.set(id, cur);
         return acc;
       }, new Map())

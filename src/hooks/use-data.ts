@@ -38,6 +38,11 @@ export interface TransactionRow {
   fromAccount: AccountWithBalance | null;
   toAccount: AccountWithBalance | null;
   category: Category | null;
+  trade?: {
+    id: string;
+    action: "BUY" | "SELL" | "SIP_BUY" | "DIVIDEND" | "INTEREST" | "MATURITY";
+    holding?: { id: string; name: string; assetClass: string } | null;
+  } | null;
   taxDeductible?: boolean;
 }
 

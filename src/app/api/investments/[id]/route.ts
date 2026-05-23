@@ -19,6 +19,32 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
     const { tradeId, amount } = body;
     let { units, pricePerUnit } = body;
 
+    const holding = await prisma.holding.findUnique({ where: { id: holdingId } });
+    if (!holding) return fail("Holding not found", 404);
+
+    if (holding.assetClass === "RECURRING_DEPOSIT" && body.recurringAmount !== undefined) {
+      const recurringAmount = new Decimal(body.recurringAmount);
+      if (!recurringAmount.greaterThan(0)) return fail("Recurring amount must be greater than zero", 400);
+      await prisma.holding.update({
+        where: { id: holdingId },
+        data: {
+          interestRate: body.interestRate !== undefined ? new Decimal(body.interestRate).toFixed(4) : undefined,
+          maturityDate: body.maturityDate ? new Date(body.maturityDate) : undefined,
+          interestFreq: "ON_MATURITY",
+        },
+      });
+      if (holding.sipRuleId) {
+        await prisma.recurringRule.update({
+          where: { id: holding.sipRuleId },
+          data: {
+            amount: recurringAmount.toFixed(2),
+            endDate: body.maturityDate ? new Date(body.maturityDate) : undefined,
+          },
+        });
+      }
+      return ok({ updated: true });
+    }
+
     if (!tradeId) return fail("tradeId required", 400);
 
     let trade;
@@ -46,9 +72,6 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
       trade = await prisma.trade.findUnique({ where: { id: tradeId } });
       if (!trade || trade.holdingId !== holdingId) return fail("Trade not found", 404);
     }
-
-    const holding = await prisma.holding.findUnique({ where: { id: holdingId } });
-    if (!holding) return fail("Holding not found", 404);
 
     const isAmountOnly = holding.type === "BOND" || holding.type === "FIXED_DEPOSIT" || holding.assetClass === "RECURRING_DEPOSIT";
     if (isAmountOnly && amount !== undefined) {

@@ -13,16 +13,17 @@ export async function GET(req: NextRequest) {
 
     const txns = await prisma.transaction.findMany({
       where: { occurredAt: { gte: range.from, lte: range.to } },
-      select: { type: true, amount: true, category: true },
+      select: { type: true, amount: true, category: true, account: { select: { type: true } }, trade: { select: { id: true } } },
     });
+    const cashflowTxns = txns.filter((t) => !t.trade);
 
     // Group expenses by category for waterfall
-    const incomeTotal = txns
-      .filter((t) => t.type === "INCOME")
+    const incomeTotal = cashflowTxns
+      .filter((t) => t.type === "INCOME" && t.account?.type !== "CREDIT")
       .reduce((s, t) => s + Number(t.amount), 0);
 
     const expenseByCategory = new Map<string, number>();
-    for (const t of txns) {
+    for (const t of cashflowTxns) {
       if (t.type === "EXPENSE") {
         const name = t.category?.name ?? "Uncategorized";
         expenseByCategory.set(name, (expenseByCategory.get(name) ?? 0) + Number(t.amount));

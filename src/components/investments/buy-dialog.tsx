@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useForm, Controller } from "react-hook-form";
 import { mutate } from "swr";
-import { format } from "date-fns";
+import { addMonths, format } from "date-fns";
 import { CalendarIcon, Search, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -62,7 +62,6 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   const isFixedIncome = ["BOND", "FIXED_DEPOSIT"].includes(assetClass);
   const isPF = assetClass === "PROVIDENT_FUND";
   const isRD = assetClass === "RECURRING_DEPOSIT";
-  const isPForRD = isPF || isRD;
   const isCommodity = ["GOLD", "SILVER"].includes(assetClass);
   const needsSearch = ["STOCKS_INDIA", "STOCKS_US", "ETF", "MUTUAL_FUND"].includes(assetClass);
 
@@ -139,6 +138,49 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
 
     const type = getTypeForAssetClass(values.assetClass);
 
+    // Recurring Deposit: first installment now, future monthly installments until maturity.
+    if (values.assetClass === "RECURRING_DEPOSIT") {
+      if (!values.units || Number(values.units) <= 0) { toast.error("Enter monthly RD installment"); return; }
+      if (!values.interestRate || Number(values.interestRate) <= 0) { toast.error("Enter RD interest rate"); return; }
+      if (!values.maturityDate) { toast.error("Select RD maturity date"); return; }
+      try {
+        const holdingName = values.name || "Recurring Deposit";
+        const investment = await postJson<{ holdingId: string }>("/api/investments", {
+          type: "FIXED_DEPOSIT",
+          assetClass: "RECURRING_DEPOSIT",
+          symbol: values.symbol || holdingName.replace(/\s+/g, "-").toUpperCase(),
+          name: holdingName,
+          units: values.units,
+          pricePerUnit: 1,
+          occurredAt: values.occurredAt,
+          accountId: values.accountId,
+          interestRate: Number(values.interestRate),
+          interestFreq: "ON_MATURITY",
+          maturityDate: values.maturityDate,
+          applyCharges: false,
+          skipTransaction: false,
+        });
+        await postJson("/api/recurring", {
+          name: `RD: ${holdingName}`,
+          type: "EXPENSE",
+          amount: values.units,
+          frequency: "MONTHLY",
+          interval: 1,
+          startDate: addMonths(values.occurredAt, 1),
+          endDate: values.maturityDate,
+          description: `Recurring deposit installment for ${holdingName}`,
+          accountId: values.accountId,
+          holdingId: investment.holdingId,
+        });
+        toast.success("Recurring deposit set up");
+        onOpenChange(false);
+        mutate("/api/investments");
+        mutate("/api/recurring");
+        mutate((key) => typeof key === "string" && (key.startsWith("/api/accounts") || key.startsWith("/api/dashboard")), undefined, { revalidate: true });
+      } catch (e) { toast.error(e instanceof Error ? e.message : "Failed"); }
+      return;
+    }
+
     // Recurring SIP/PF
     if (values.isRecurring && sipEligible) {
       if (!values.sipAmount || Number(values.sipAmount) <= 0) { toast.error("Enter recurring amount"); return; }
@@ -182,25 +224,23 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
       return;
     }
 
-    // One-time PF/RD
-    if (isPForRD) {
-      if (!values.units || Number(values.units) <= 0) { toast.error(isPF ? "Enter PF balance" : "Enter RD amount"); return; }
+    // One-time PF
+    if (isPF) {
+      if (!values.units || Number(values.units) <= 0) { toast.error("Enter PF balance"); return; }
       try {
         await postJson("/api/investments", {
-          type: isPF ? "PROVIDENT_FUND" : "FIXED_DEPOSIT",
+          type: "PROVIDENT_FUND",
           assetClass: values.assetClass,
           symbol: values.assetClass,
-          name: values.name || (isPF ? "Provident Fund" : "Recurring Deposit"),
+          name: values.name || "Provident Fund",
           units: 1,
           pricePerUnit: values.units,
           occurredAt: values.occurredAt,
           accountId: values.accountId,
           interestRate: values.interestRate ? Number(values.interestRate) : undefined,
-          interestFreq: values.interestFreq || "YEARLY",
-          maturityDate: values.maturityDate || undefined,
           applyCharges: false, skipTransaction,
         });
-        toast.success(isPF ? "PF balance recorded" : "RD recorded");
+        toast.success("PF balance recorded");
         onOpenChange(false);
         mutate("/api/investments");
       } catch (e) { toast.error(e instanceof Error ? e.message : "Failed"); }
@@ -314,7 +354,7 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           </div>
 
           {/* SIP toggle — only for eligible classes */}
-          {sipEligible && (
+          {sipEligible && !isRD && (
             <div className="flex items-center justify-between rounded-md border px-3 py-2">
               <div>
                 <p className="text-sm font-medium">{isRecurring ? "Recurring SIP" : "One-time purchase"}</p>
@@ -348,18 +388,18 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           )}
 
           {/* Name for manual entries (bonds, FD, gold, silver, PF) */}
-          {!needsSearch && !isPForRD && (
+          {!needsSearch && !isPF && (
             <div className="space-y-1.5">
               <Label>Name</Label>
-              <Input placeholder={isCommodity ? "Physical Gold 24K" : isFixedIncome ? "SGB 2028 / HDFC FD" : "Name"} {...form.register("name")} onChange={(e) => { form.setValue("name", e.target.value); if (!needsSearch) form.setValue("symbol", e.target.value.replace(/\s+/g, "-").toUpperCase()); }} />
+              <Input placeholder={isRD ? "HDFC RD" : isCommodity ? "Physical Gold 24K" : isFixedIncome ? "SGB 2028 / HDFC FD" : "Name"} {...form.register("name")} onChange={(e) => { form.setValue("name", e.target.value); if (!needsSearch) form.setValue("symbol", e.target.value.replace(/\s+/g, "-").toUpperCase()); }} />
             </div>
           )}
 
           {/* Recurring: amount + frequency */}
-          {isRecurring && (
+          {isRecurring && !isRD && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>{ isPForRD ? (isPF ? "Monthly PF contribution" : "Monthly RD installment") : "SIP amount"}</Label>
+                <Label>{isPF ? "Monthly PF contribution" : "SIP amount"}</Label>
                 <Input inputMode="decimal" placeholder="5000" {...form.register("sipAmount")} />
               </div>
               <div className="space-y-1.5">
@@ -379,7 +419,7 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           )}
 
           {/* One-time: units + price */}
-          {!isRecurring && !isPForRD && !isFixedIncome && (
+          {!isRecurring && !isPF && !isRD && !isFixedIncome && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>{isCommodity ? "Weight (grams)" : isFixedIncome ? "Amount" : "Units"}</Label>
@@ -406,6 +446,14 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
             </div>
           )}
 
+          {/* Recurring deposit: monthly installment */}
+          {isRD && (
+            <div className="space-y-1.5">
+              <Label>Monthly installment</Label>
+              <Input inputMode="decimal" placeholder="10000" {...form.register("units")} />
+            </div>
+          )}
+
           {/* Fixed income one-time: just amount */}
           {!isRecurring && isFixedIncome && (
             <div className="space-y-1.5">
@@ -415,12 +463,12 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
             </div>
           )}
 
-          {/* PF/RD one-time: just amount */}
-          {!isRecurring && isPForRD && (
+          {/* PF one-time: just amount */}
+          {!isRecurring && isPF && (
             <div className="space-y-1.5">
-              <Label>{isPF ? "Current PF balance" : "RD installment amount"}</Label>
-              <Input inputMode="decimal" placeholder={isPF ? "500000" : "10000"} {...form.register("units")} />
-              <p className="text-[10px] text-muted-foreground">{isPF ? "Total accumulated PF corpus." : "Monthly installment for the recurring deposit."}</p>
+              <Label>Current PF balance</Label>
+              <Input inputMode="decimal" placeholder="500000" {...form.register("units")} />
+              <p className="text-[10px] text-muted-foreground">Total accumulated PF corpus.</p>
             </div>
           )}
 
@@ -451,7 +499,7 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           </div>
 
           {/* Record existing holding toggle — skip transaction */}
-          {!isRecurring && (
+          {!isRecurring && !isRD && (
             <div className="flex items-center justify-between rounded-md border px-3 py-2">
               <div>
                 <p className="text-sm font-medium">Record existing holding</p>
@@ -463,8 +511,8 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
             </div>
           )}
 
-          {/* Fixed income fields (bonds, FD, RD — NOT PF) */}
-          {(isFixedIncome || isRD) && !isRecurring && !isPF && (
+          {/* Fixed income fields: FD/Bond payout, RD maturity-only */}
+          {isFixedIncome && !isRecurring && (
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label>Interest %</Label>
@@ -501,13 +549,35 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
             </div>
           )}
 
+          {isRD && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Interest %</Label>
+                <Input inputMode="decimal" placeholder="7.5" {...form.register("interestRate")} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Maturity</Label>
+                <Controller control={form.control} name="maturityDate" render={({ field }) => (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="outline" className={cn("w-full justify-start text-left font-normal text-xs", !field.value && "text-muted-foreground")}>
+                        <CalendarIcon className="mr-1 h-3.5 w-3.5" />{field.value ? format(new Date(field.value), "PP") : "Pick"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-auto p-0"><Calendar mode="single" selected={field.value ? new Date(field.value) : undefined} onSelect={(d) => field.onChange(d ? d.toISOString() : "")} /></PopoverContent>
+                  </Popover>
+                )} />
+              </div>
+            </div>
+          )}
+
           {behaviorType === "STOCK" && !isRecurring && (
             <p className="text-xs text-muted-foreground">Trading charges are applied for stocks only when enabled in Settings.</p>
           )}
 
           <DialogFooter className="gap-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Recording..." : isRecurring ? "Set up SIP" : "Record purchase"}</Button>
+            <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Recording..." : isRD ? "Set up RD" : isRecurring ? "Set up SIP" : "Record purchase"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -52,6 +52,7 @@ export async function computeBudgetProgress(
         type: "EXPENSE",
         categoryId: budget.categoryId,
         occurredAt: { gte: start, lte: end },
+        trade: null,
       },
       select: { amount: true },
     });

@@ -32,6 +32,7 @@ interface HoldingItem {
   interestFreq?: string | null;
   maturityDate?: string | null;
   purchaseDate?: string;
+  fixedIncomeLots?: { amount: number; occurredAt: string }[];
 }
 
 interface FormValues {
@@ -211,9 +212,19 @@ function expectedFixedIncomeRedemption(holding: HoldingItem, date: Date) {
     return principal;
   }
 
-  const purchaseDate = new Date(holding.purchaseDate);
   const maturityDate = holding.maturityDate ? new Date(holding.maturityDate) : date;
   const endDate = date < maturityDate ? date : maturityDate;
+  if (holding.assetClass === "RECURRING_DEPOSIT" && holding.fixedIncomeLots?.length) {
+    const total = holding.fixedIncomeLots.reduce((sum, lot) => {
+      const lotDate = new Date(lot.occurredAt);
+      const days = Math.max(0, Math.round((endDate.getTime() - lotDate.getTime()) / 86400000));
+      const interest = (Number(lot.amount) * Number(holding.interestRate) * days) / (100 * 365);
+      return sum + Number(lot.amount) + interest;
+    }, 0);
+    return Math.round(total * 100) / 100;
+  }
+
+  const purchaseDate = new Date(holding.purchaseDate);
   const days = Math.max(0, Math.round((endDate.getTime() - purchaseDate.getTime()) / 86400000));
   const interest = (principal * Number(holding.interestRate) * days) / (100 * 365);
   return Math.round((principal + interest) * 100) / 100;

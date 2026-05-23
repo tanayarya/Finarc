@@ -46,7 +46,9 @@ interface HoldingItem {
   interestRate: number | null;
   interestFreq: string | null;
   maturityDate: string | null;
+  recurringAmount?: number | null;
   purchaseDate: string;
+  fixedIncomeLots?: { amount: number; occurredAt: string }[];
   tags: string[];
 }
 
@@ -118,8 +120,9 @@ export default function InvestmentsPage() {
   const holdings = data?.holdings ?? [];
   const stocks = holdings.filter((h) => h.type === "STOCK");
   const mfs = holdings.filter((h) => h.type === "MUTUAL_FUND");
-  const bonds = holdings.filter((h) => h.type === "BOND");
-  const fds = holdings.filter((h) => h.type === "FIXED_DEPOSIT");
+  const bonds = holdings.filter((h) => h.assetClass === "BOND");
+  const fds = holdings.filter((h) => h.assetClass === "FIXED_DEPOSIT");
+  const rds = holdings.filter((h) => h.assetClass === "RECURRING_DEPOSIT");
   const pfs = holdings.filter((h) => h.type === "PROVIDENT_FUND");
 
   // Total wealth pie: investments + bank accounts
@@ -255,6 +258,7 @@ export default function InvestmentsPage() {
                 {mfs.length > 0 && <TabsTrigger value="mf">MF ({mfs.length})</TabsTrigger>}
                 {bonds.length > 0 && <TabsTrigger value="bonds">Bonds ({bonds.length})</TabsTrigger>}
                 {fds.length > 0 && <TabsTrigger value="fd">FDs ({fds.length})</TabsTrigger>}
+                {rds.length > 0 && <TabsTrigger value="rd">RDs ({rds.length})</TabsTrigger>}
                 {pfs.length > 0 && <TabsTrigger value="pf">PF ({pfs.length})</TabsTrigger>}
               </TabsList>
               <div className="flex rounded-md border">
@@ -283,6 +287,7 @@ export default function InvestmentsPage() {
             <TabsContent value="mf">{viewMode === "grid" ? <HoldingsList holdings={mfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} /> : <HoldingsTable holdings={mfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} />}</TabsContent>
             <TabsContent value="bonds">{viewMode === "grid" ? <HoldingsList holdings={bonds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} /> : <HoldingsTable holdings={bonds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} />}</TabsContent>
             <TabsContent value="fd">{viewMode === "grid" ? <HoldingsList holdings={fds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} /> : <HoldingsTable holdings={fds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} />}</TabsContent>
+            <TabsContent value="rd">{viewMode === "grid" ? <HoldingsList holdings={rds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} /> : <HoldingsTable holdings={rds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} />}</TabsContent>
             <TabsContent value="pf">{viewMode === "grid" ? <HoldingsList holdings={pfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} /> : <HoldingsTable holdings={pfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} />}</TabsContent>
           </Tabs>
         </>

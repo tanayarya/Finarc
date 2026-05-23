@@ -216,19 +216,27 @@ export default function TransactionsPage() {
               </TableHeader>
               <TableBody>
                 {data.items.map((t) => {
+                  const isInvestmentFlow = Boolean(t.trade);
                   const sign = t.type === "INCOME" ? "+" : t.type === "EXPENSE" ? "-" : "";
-                  const tone = t.type === "INCOME" ? "text-emerald-600 dark:text-emerald-400" : t.type === "EXPENSE" ? "text-rose-600 dark:text-rose-400" : "text-foreground";
+                  const tone = isInvestmentFlow ? "text-foreground" : t.type === "INCOME" ? "text-emerald-600 dark:text-emerald-400" : t.type === "EXPENSE" ? "text-rose-600 dark:text-rose-400" : "text-foreground";
                   const accountLabel = (() => {
                     if (t.type === "INCOME" || t.type === "EXPENSE") return t.account?.name ?? "—";
                     return `${t.fromAccount?.name ?? "?"} → ${t.toAccount?.name ?? "?"}`;
                   })();
+                  const label = isInvestmentFlow
+                    ? t.trade?.action === "SELL" || t.trade?.action === "MATURITY"
+                      ? "Investment redemption"
+                      : t.trade?.action === "DIVIDEND" || t.trade?.action === "INTEREST"
+                        ? "Investment income"
+                        : "Investment buy"
+                    : TYPE_LABELS[t.type];
                   return (
                     <TableRow key={t.id}>
                       <TableCell className="text-sm">{format(new Date(t.occurredAt), "MMM d, yyyy")}</TableCell>
-                      <TableCell><Badge variant="muted" className="text-[10px]">{TYPE_LABELS[t.type]}</Badge></TableCell>
+                      <TableCell><Badge variant="muted" className="text-[10px]">{label}</Badge></TableCell>
                       <TableCell className="max-w-[260px] truncate">{t.description || <span className="text-muted-foreground">—</span>}</TableCell>
                       <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">{accountLabel}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{t.category?.name ?? "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{isInvestmentFlow ? t.trade?.holding?.name ?? "Investment" : t.category?.name ?? "—"}</TableCell>
                       <TableCell className={cn("text-right tabular font-medium", tone)}>{sign}{formatCurrency(t.amount)}</TableCell>
                       {data.runningBalances && (
                         <TableCell className="text-right tabular text-xs text-muted-foreground">

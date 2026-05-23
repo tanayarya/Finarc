@@ -82,11 +82,12 @@ async function buildContext(shareDetails: boolean): Promise<string> {
     thisMonth.setDate(1);
     const txns = await prisma.transaction.findMany({
       where: { occurredAt: { gte: thisMonth } },
-      select: { type: true, amount: true },
+      select: { type: true, amount: true, account: { select: { type: true } }, trade: { select: { id: true } } },
     });
     let income = 0, expense = 0;
     for (const t of txns) {
-      if (t.type === "INCOME") income += Number(t.amount);
+      if (t.trade) continue;
+      if (t.type === "INCOME" && t.account?.type !== "CREDIT") income += Number(t.amount);
       if (t.type === "EXPENSE") expense += Number(t.amount);
     }
     ctx += `\nTHIS MONTH SUMMARY: Income=${income.toFixed(0)}, Expenses=${expense.toFixed(0)}, Net=${(income - expense).toFixed(0)}\n`;

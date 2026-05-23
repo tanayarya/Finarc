@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Decimal } from "decimal.js";
 import type { z } from "zod";
 import { recurringCreateSchema, recurringUpdateSchema } from "@/lib/validators";
 import { nextOccurrence } from "@/lib/finance/dates";
@@ -6,7 +7,7 @@ import { isAfter, isSameDay } from "date-fns";
 
 export async function createRecurringRule(raw: z.infer<typeof recurringCreateSchema>) {
   const input = recurringCreateSchema.parse(raw);
-  return prisma.recurringRule.create({
+  const rule = await prisma.recurringRule.create({
     data: {
       name: input.name,
       type: input.type,
@@ -22,6 +23,13 @@ export async function createRecurringRule(raw: z.infer<typeof recurringCreateSch
       categoryId: input.categoryId ?? null,
     },
   });
+  if (input.holdingId) {
+    await prisma.holding.update({
+      where: { id: input.holdingId },
+      data: { sipRuleId: rule.id },
+    });
+  }
+  return rule;
 }
 
 export async function updateRecurringRule(
@@ -70,6 +78,7 @@ export async function deleteRecurringRule(id: string) {
 export async function materializeDueRecurring(now = new Date()): Promise<number> {
   const due = await prisma.recurringRule.findMany({
     where: { status: "ACTIVE", nextRunDate: { lte: now } },
+    include: { sipHoldings: true },
   });
   let count = 0;
   for (const rule of due) {
@@ -107,7 +116,7 @@ export async function materializeDueRecurring(now = new Date()): Promise<number>
           }
         }
 
-        await prisma.transaction.create({
+        const txn = await prisma.transaction.create({
           data: {
             type: rule.type,
             amount: paymentAmount.toString(),
@@ -120,6 +129,10 @@ export async function materializeDueRecurring(now = new Date()): Promise<number>
             recurringRuleId: rule.id,
           },
         });
+        const rdHolding = rule.sipHoldings.find((h) => h.assetClass === "RECURRING_DEPOSIT");
+        if (rdHolding && rule.type === "EXPENSE") {
+          await applyRecurringDepositInstallment(rdHolding.id, paymentAmount.toString(), cursor, txn.id);
+        }
         count += 1;
       }
       cursor = nextOccurrence(cursor, rule.frequency, rule.interval);
@@ -131,4 +144,45 @@ export async function materializeDueRecurring(now = new Date()): Promise<number>
     });
   }
   return count;
+}
+
+async function applyRecurringDepositInstallment(
+  holdingId: string,
+  amount: string,
+  occurredAt: Date,
+  transactionId: string
+) {
+  const holding = await prisma.holding.findUnique({ where: { id: holdingId } });
+  if (!holding || holding.archived || holding.assetClass !== "RECURRING_DEPOSIT") return;
+
+  const installment = new Decimal(amount);
+  const currentUnits = new Decimal(holding.units.toString());
+  const nextUnits = currentUnits.plus(installment);
+  const principal = holding.principalAmount
+    ? new Decimal(holding.principalAmount.toString()).plus(installment)
+    : nextUnits;
+
+  await prisma.$transaction([
+    prisma.trade.create({
+      data: {
+        holdingId,
+        action: "SIP_BUY",
+        units: installment.toFixed(6),
+        price: "1.0000",
+        amount: installment.toFixed(2),
+        netAmount: installment.toFixed(2),
+        occurredAt,
+        transactionId,
+      },
+    }),
+    prisma.holding.update({
+      where: { id: holdingId },
+      data: {
+        units: nextUnits.toFixed(6),
+        avgBuyPrice: "1.0000",
+        currentPrice: "1.0000",
+        principalAmount: principal.toFixed(2),
+      },
+    }),
+  ]);
 }

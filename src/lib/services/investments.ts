@@ -82,10 +82,21 @@ export async function buyInvestment(input: BuyInput) {
 
   const netAmount = round2(amount + charges.total);
 
-  // Find or create holding
-  let holding = await prisma.holding.findFirst({
-    where: { symbol: input.symbol, accountId: input.accountId, type: input.type, archived: false },
-  });
+  const shouldMergeHolding = isFungibleHoldingInput(input);
+
+  // Find or create holding. Fungible instruments such as stocks/MFs average into
+  // the same holding; contract-style assets such as FD/RD/Bond/PF stay separate.
+  let holding = shouldMergeHolding
+    ? await prisma.holding.findFirst({
+        where: {
+          symbol: input.symbol,
+          accountId: input.accountId,
+          type: input.type,
+          assetClass: input.assetClass ?? inferAssetClass(input),
+          archived: false,
+        },
+      })
+    : null;
 
   if (holding) {
     // Update weighted average buy price and units
@@ -257,6 +268,45 @@ function isInterestBearingHolding(holding: Pick<Holding, "type" | "assetClass">)
   return holding.type === "BOND" || holding.type === "FIXED_DEPOSIT" || holding.assetClass === "RECURRING_DEPOSIT";
 }
 
+function isFungibleHoldingInput(input: Pick<BuyInput, "type" | "assetClass">) {
+  if (input.assetClass === "RECURRING_DEPOSIT") return false;
+  return input.type === "STOCK" || input.type === "MUTUAL_FUND" || input.type === "COMMODITY";
+}
+
+function projectedHoldingValue(
+  holding: Holding & { trades: Array<{ action: TradeAction; amount: Decimal; occurredAt: Date }> },
+  fallbackValue: Decimal
+) {
+  if (!isInterestBearingHolding(holding)) return fallbackValue;
+  if (holding.interestFreq !== "ON_MATURITY" || !holding.interestRate) return fallbackValue;
+
+  const endDate = holding.maturityDate && holding.maturityDate < new Date()
+    ? holding.maturityDate
+    : new Date();
+  const rate = new Decimal(holding.interestRate.toString()).div(100);
+  const buyLots = holding.trades.filter((t) => t.action === "BUY" || t.action === "SIP_BUY");
+
+  if (holding.assetClass === "RECURRING_DEPOSIT" && buyLots.length > 0) {
+    return buyLots.reduce((total, lot) => {
+      const principal = new Decimal(lot.amount.toString());
+      const days = daysBetween(lot.occurredAt, endDate);
+      const interest = principal.mul(rate).mul(days).div(365);
+      return total.plus(principal).plus(interest);
+    }, new Decimal(0)).toDecimalPlaces(2);
+  }
+
+  const principal = holding.principalAmount
+    ? new Decimal(holding.principalAmount.toString())
+    : fallbackValue;
+  const startDate = buyLots[0]?.occurredAt ?? holding.createdAt;
+  const days = daysBetween(startDate, endDate);
+  return principal.plus(principal.mul(rate).mul(days).div(365)).toDecimalPlaces(2);
+}
+
+function daysBetween(start: Date, end: Date) {
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+}
+
 function interestSchedule(freq: NonNullable<BuyInput["interestFreq"]>): {
   frequency: "MONTHLY" | "YEARLY";
   interval: number;
@@ -393,7 +443,7 @@ export async function recordDividendOrInterest(holdingId: string, amount: number
 export async function getPortfolioSummary() {
   const holdings = await prisma.holding.findMany({
     where: { archived: false },
-    include: { account: true, trades: { orderBy: { occurredAt: "asc" } } },
+    include: { account: true, sipRule: true, trades: { orderBy: { occurredAt: "asc" } } },
   });
 
   let totalInvested = ZERO;
@@ -404,7 +454,7 @@ export async function getPortfolioSummary() {
     const avgPrice = new Decimal(h.avgBuyPrice.toString());
     const currentPrice = h.currentPrice ? new Decimal(h.currentPrice.toString()) : avgPrice;
     const invested = units.mul(avgPrice);
-    const currentValue = units.mul(currentPrice);
+    const currentValue = projectedHoldingValue(h, units.mul(currentPrice));
     const pnl = currentValue.minus(invested);
     const pnlPercent = invested.isZero() ? 0 : pnl.div(invested).mul(100).toNumber();
 
@@ -430,7 +480,14 @@ export async function getPortfolioSummary() {
       interestRate: h.interestRate ? Number(h.interestRate) : null,
       interestFreq: h.interestFreq,
       maturityDate: h.maturityDate?.toISOString() ?? null,
+      recurringAmount: h.sipRule ? Number(h.sipRule.amount) : null,
       purchaseDate: h.trades.find((t) => t.action === "BUY" || t.action === "SIP_BUY")?.occurredAt.toISOString() ?? h.createdAt.toISOString(),
+      fixedIncomeLots: h.trades
+        .filter((t) => t.action === "BUY" || t.action === "SIP_BUY")
+        .map((t) => ({
+          amount: Number(t.amount),
+          occurredAt: t.occurredAt.toISOString(),
+        })),
       tags: h.tags ?? [],
     };
   });

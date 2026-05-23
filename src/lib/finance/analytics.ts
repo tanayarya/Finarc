@@ -29,11 +29,12 @@ export interface AccountShare {
 export async function totalsForRange(range: DateRange) {
   const txns = await prisma.transaction.findMany({
     where: { occurredAt: { gte: range.from, lte: range.to } },
-    select: { type: true, amount: true, account: { select: { type: true } } },
+    select: { type: true, amount: true, account: { select: { type: true } }, trade: { select: { id: true } } },
   });
   let income = ZERO;
   let expense = ZERO;
   for (const t of txns) {
+    if (t.trade) continue;
     if (t.type === "INCOME" && t.account?.type !== "CREDIT") income = add(income, t.amount);
     else if (t.type === "EXPENSE") expense = add(expense, t.amount);
   }
@@ -48,7 +49,7 @@ export async function totalsForRange(range: DateRange) {
 export async function incomeExpenseSeries(range: DateRange): Promise<SeriesPoint[]> {
   const txns = await prisma.transaction.findMany({
     where: { occurredAt: { gte: range.from, lte: range.to } },
-    select: { type: true, amount: true, occurredAt: true, account: { select: { type: true } } },
+    select: { type: true, amount: true, occurredAt: true, account: { select: { type: true } }, trade: { select: { id: true } } },
     orderBy: { occurredAt: "asc" },
   });
 
@@ -57,7 +58,7 @@ export async function incomeExpenseSeries(range: DateRange): Promise<SeriesPoint
   if (useDaily) {
     const days = eachDayOfInterval({ start: range.from, end: range.to });
     return days.map((d) => {
-      const dayTxns = txns.filter((t) => isSameDay(t.occurredAt, d));
+      const dayTxns = txns.filter((t) => isSameDay(t.occurredAt, d) && !t.trade);
       const income = dayTxns
         .filter((t) => t.type === "INCOME" && t.account?.type !== "CREDIT")
         .reduce((acc, t) => acc + Number(t.amount), 0);
@@ -75,7 +76,7 @@ export async function incomeExpenseSeries(range: DateRange): Promise<SeriesPoint
 
   const months = eachMonthOfInterval({ start: range.from, end: range.to });
   return months.map((m) => {
-    const monthTxns = txns.filter((t) => isSameMonth(t.occurredAt, m));
+    const monthTxns = txns.filter((t) => isSameMonth(t.occurredAt, m) && !t.trade);
     const income = monthTxns
       .filter((t) => t.type === "INCOME" && t.account?.type !== "CREDIT")
       .reduce((acc, t) => acc + Number(t.amount), 0);
@@ -97,6 +98,7 @@ export async function categoryBreakdown(range: DateRange): Promise<CategoryShare
       type: "EXPENSE",
       occurredAt: { gte: range.from, lte: range.to },
       categoryId: { not: null },
+      trade: null,
     },
     select: { amount: true, category: true, categoryId: true },
   });

@@ -169,6 +169,7 @@ export const recurringCreateSchema = z
     accountId: z.string().optional().nullable(),
     toAccountId: z.string().optional().nullable(),
     categoryId: z.string().optional().nullable(),
+    holdingId: z.string().optional().nullable(),
   })
   .superRefine((data, ctx) => {
     if (data.type === "TRANSFER" || data.type === "CREDIT_PAYMENT" || data.type === "LOAN_PAYMENT") {
