@@ -88,7 +88,11 @@ async function handleTransaction(botToken: string, chatId: string, text: string)
   const accountList = accounts.map((a) => `${a.name} (${a.type}, id:${a.id})`).join(", ");
   const categoryList = categories.map((c) => `${c.name} (${c.kind}, id:${c.id})`).join(", ");
 
+  const today = new Date().toISOString().slice(0, 10); // e.g. "2026-05-23"
+
   const prompt = `Parse this message into a financial transaction. ONLY income or expense transactions are allowed.
+
+Today's date is: ${today}
 
 Available accounts: ${accountList}
 Available categories: ${categoryList}
@@ -96,12 +100,14 @@ Available categories: ${categoryList}
 Rules:
 - Match account names loosely (HDFC matches "HDFC Savings", SBI matches "SBI Account")
 - Match category names loosely (food/groceries → Food, shopping/amazon → Shopping)
-- If no date mentioned, use today
+- If no date mentioned, use today's date: ${today}
+- If user says "today", use: ${today}
+- If user says "yesterday", use one day before ${today}
 - If type is not clearly income or expense, respond with error
 - Transfers, investments, loan payments, credit payments are NOT allowed via bot
 
 Respond ONLY with valid JSON in this exact format:
-{"type":"EXPENSE","amount":500,"description":"Amazon order","accountId":"<id>","categoryId":"<id or null>","occurredAt":"2026-05-21","error":null}
+{"type":"EXPENSE","amount":500,"description":"Amazon order","accountId":"<id>","categoryId":"<id or null>","occurredAt":"${today}","error":null}
 
 Or if it cannot be parsed or is not income/expense:
 {"error":"<reason>"}
@@ -159,11 +165,15 @@ User message: "${text}"`;
     }
 
     // Create the transaction
+    const txnDate = parsed.occurredAt && new Date(parsed.occurredAt).getFullYear() >= 2025
+      ? new Date(parsed.occurredAt)
+      : new Date(); // fallback to today if AI returns a bad date
+
     await prisma.transaction.create({
       data: {
         type: parsed.type,
         amount: String(parsed.amount),
-        occurredAt: new Date(parsed.occurredAt ?? new Date()),
+        occurredAt: txnDate,
         description: parsed.description ?? null,
         accountId: parsed.accountId,
         categoryId: parsed.categoryId ?? null,
