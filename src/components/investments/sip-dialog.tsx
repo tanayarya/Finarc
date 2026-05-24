@@ -22,6 +22,7 @@ import { useCurrency } from "@/components/currency-provider";
 
 interface HoldingItem {
   id: string;
+  type: string;
   symbol: string;
   name: string;
   accountId: string;
@@ -72,8 +73,10 @@ export function SipDialog({
 
   const onSubmit = form.handleSubmit(async (values) => {
     if (!holding) return;
+    const isPF = holding.type === "PROVIDENT_FUND";
+    const prefix = isPF ? "PF" : "SIP";
     if (holding.recurringAmount) {
-      toast.error("SIP is already active for this fund");
+      toast.error(isPF ? "PF contribution is already active" : "SIP is already active for this fund");
       return;
     }
     if (!values.amount || Number(values.amount) <= 0) {
@@ -87,17 +90,17 @@ export function SipDialog({
 
     try {
       await postJson("/api/recurring", {
-        name: `SIP: ${holding.name}`,
+        name: `${prefix}: ${holding.name}`,
         type: "EXPENSE",
         amount: values.amount,
         frequency: values.frequency,
         interval: 1,
         startDate: values.startDate,
-        description: `Recurring Mutual Fund contribution`,
+        description: isPF ? "Recurring PF contribution" : "Recurring Mutual Fund contribution",
         accountId: values.accountId,
         holdingId: holding.id,
       });
-      toast.success("SIP set up");
+      toast.success(isPF ? "PF contribution set up" : "SIP set up");
       onOpenChange(false);
       mutate("/api/investments");
       mutate("/api/recurring");
@@ -108,14 +111,17 @@ export function SipDialog({
   });
 
   if (!holding) return null;
+  const isPF = holding.type === "PROVIDENT_FUND";
+  const noun = isPF ? "PF contribution" : "SIP";
+  const title = isPF ? "Set up PF contribution" : "Set up SIP";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
-          <DialogTitle>Set up SIP</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            {holding.name} · future units will be added to this holding.
+            {holding.name} · future contributions will be added to this holding.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -126,14 +132,14 @@ export function SipDialog({
             </div>
             {holding.recurringAmount ? (
               <p className="mt-1.5 text-xs text-muted-foreground">
-                SIP already active at {formatCurrency(holding.recurringAmount)}.
+                {noun} already active at {formatCurrency(holding.recurringAmount)}.
               </p>
             ) : null}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>SIP amount</Label>
+              <Label>{isPF ? "Contribution amount" : "SIP amount"}</Label>
               <Input inputMode="decimal" placeholder="5000" {...form.register("amount")} autoFocus />
             </div>
             <div className="space-y-1.5">
@@ -183,13 +189,15 @@ export function SipDialog({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Cash will be debited only when the applicable NAV is available, then units are credited as an investment buy.
+            {isPF
+              ? "Cash will be debited on schedule and added to this PF balance."
+              : "Cash will be debited only when the applicable NAV is available, then units are credited as an investment buy."}
           </p>
 
           <DialogFooter className="gap-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={form.formState.isSubmitting || Boolean(holding.recurringAmount)}>
-              {form.formState.isSubmitting ? "Saving..." : "Set up SIP"}
+              {form.formState.isSubmitting ? "Saving..." : title}
             </Button>
           </DialogFooter>
         </form>

@@ -152,6 +152,21 @@ export interface DashboardData {
     dueDate: string;
     amount: string;
   }>;
+  bondInterestReviews: Array<{
+    holdingId: string;
+    name: string;
+    accountId: string;
+    accountName: string;
+    periodStart: string;
+    periodEnd: string;
+    dueDate: string;
+    principal: string;
+    rate: string;
+    tdsRate: string;
+    grossInterest: string;
+    tdsAmount: string;
+    netAmount: string;
+  }>;
 }
 
 export function useDashboard(query: string = "") {

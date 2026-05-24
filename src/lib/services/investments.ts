@@ -66,6 +66,8 @@ interface BuyInput {
   interestRate?: number;
   interestFreq?: "MONTHLY" | "QUARTERLY" | "HALF_YEARLY" | "YEARLY" | "ON_MATURITY";
   maturityDate?: Date;
+  bondPayoutDay?: number | null;
+  bondTdsRate?: number | null;
   // Whether to apply trading charges (stocks yes, MF/bonds/FD no)
   applyCharges?: boolean;
   // Skip creating a transaction (for migrating existing holdings)
@@ -141,6 +143,8 @@ export async function buyInvestment(input: BuyInput) {
         interestFreq: input.interestFreq,
         maturityDate: input.maturityDate,
         principalAmount: input.type === "BOND" || input.type === "FIXED_DEPOSIT" ? amount.toFixed(2) : undefined,
+        bondPayoutDay: input.type === "BOND" ? input.bondPayoutDay ?? null : null,
+        bondTdsRate: input.type === "BOND" ? (input.bondTdsRate ?? 10).toFixed(4) : null,
         notes: input.notes,
       },
     });
@@ -155,6 +159,12 @@ export async function buyInvestment(input: BuyInput) {
         interestFreq: input.interestFreq ?? holding.interestFreq,
         maturityDate: input.maturityDate ?? holding.maturityDate,
         principalAmount: principal.toFixed(2),
+        bondPayoutDay: holding.type === "BOND" ? input.bondPayoutDay ?? holding.bondPayoutDay : undefined,
+        bondTdsRate: holding.type === "BOND"
+          ? input.bondTdsRate !== undefined && input.bondTdsRate !== null
+            ? input.bondTdsRate.toFixed(4)
+            : holding.bondTdsRate ?? "10.0000"
+          : undefined,
       },
     });
   }
@@ -199,6 +209,13 @@ export async function buyInvestment(input: BuyInput) {
 async function syncFixedIncomeInterestRule(holdingId: string, fallbackStartDate: Date) {
   const holding = await prisma.holding.findUnique({ where: { id: holdingId } });
   if (!holding || !isInterestBearingHolding(holding)) return;
+  if (holding.type === "BOND") {
+    if (holding.sipRuleId) {
+      await prisma.recurringRule.delete({ where: { id: holding.sipRuleId } }).catch(() => {});
+      await prisma.holding.update({ where: { id: holding.id }, data: { sipRuleId: null } }).catch(() => {});
+    }
+    return;
+  }
   if (!holding.interestRate || !holding.interestFreq || holding.interestFreq === "ON_MATURITY") return;
 
   const schedule = interestSchedule(holding.interestFreq);
@@ -461,6 +478,9 @@ export async function getPortfolioSummary() {
     const currentPrice = h.currentPrice ? new Decimal(h.currentPrice.toString()) : avgPrice;
     const invested = units.mul(avgPrice);
     const currentValue = projectedHoldingValue(h, units.mul(currentPrice));
+    const incomeEarned = h.trades
+      .filter((t) => t.action === "INTEREST" || t.action === "DIVIDEND")
+      .reduce((total, t) => total.plus(t.netAmount.toString()), new Decimal(0));
     const pnl = currentValue.minus(invested);
     const pnlPercent = invested.isZero() ? 0 : pnl.div(invested).mul(100).toNumber();
 
@@ -480,12 +500,15 @@ export async function getPortfolioSummary() {
       currentValue: currentValue.toNumber(),
       pnl: pnl.toNumber(),
       pnlPercent: round2(pnlPercent),
+      incomeEarned: incomeEarned.toNumber(),
       lastPriceUpdate: h.lastPriceUpdate?.toISOString() ?? null,
       accountId: h.accountId,
       accountName: h.account.name,
       interestRate: h.interestRate ? Number(h.interestRate) : null,
       interestFreq: h.interestFreq,
       maturityDate: h.maturityDate?.toISOString() ?? null,
+      bondPayoutDay: h.bondPayoutDay,
+      bondTdsRate: h.bondTdsRate ? Number(h.bondTdsRate) : null,
       recurringAmount: h.sipRule ? Number(h.sipRule.amount) : null,
       purchaseDate: h.trades.find((t) => t.action === "BUY" || t.action === "SIP_BUY")?.occurredAt.toISOString() ?? h.createdAt.toISOString(),
       fixedIncomeLots: h.trades

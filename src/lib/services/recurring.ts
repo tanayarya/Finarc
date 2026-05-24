@@ -164,9 +164,9 @@ type RecurringRuleWithHoldings = Awaited<ReturnType<typeof prisma.recurringRule.
 async function findRecurringInvestmentHolding(rule: RecurringRuleWithHoldings) {
   const linked = rule.sipHoldings.find((h) => !h.archived);
   if (linked) return linked;
-  if (!rule.accountId || !/^SIP:|^RD:/i.test(rule.name)) return null;
+  if (!rule.accountId || !/^(SIP|RD|PF):/i.test(rule.name)) return null;
 
-  const rawName = rule.name.replace(/^(SIP|RD):\s*/i, "").trim();
+  const rawName = rule.name.replace(/^(SIP|RD|PF):\s*/i, "").trim();
   const normalized = normalizeName(rawName);
   const candidates = await prisma.holding.findMany({
     where: { accountId: rule.accountId, archived: false },
@@ -250,6 +250,36 @@ async function applyRecurringInvestmentBuy(
 ) {
   const holding = await prisma.holding.findUnique({ where: { id: holdingId } });
   if (!holding || holding.archived) return;
+
+  if (holding.type === "PROVIDENT_FUND") {
+    const currentValue = new Decimal(holding.units.toString()).mul(holding.avgBuyPrice.toString());
+    const nextValue = currentValue.plus(plan.amount);
+    await prisma.$transaction([
+      prisma.trade.create({
+        data: {
+          holdingId,
+          action: "SIP_BUY",
+          units: "1.000000",
+          price: plan.amount.toFixed(4),
+          amount: plan.amount.toFixed(2),
+          netAmount: plan.amount.toFixed(2),
+          occurredAt: plan.occurredAt,
+          transactionId,
+          notes: "Recurring PF contribution",
+        },
+      }),
+      prisma.holding.update({
+        where: { id: holdingId },
+        data: {
+          units: "1.000000",
+          avgBuyPrice: nextValue.toFixed(4),
+          currentPrice: nextValue.toFixed(4),
+          lastPriceUpdate: plan.occurredAt,
+        },
+      }),
+    ]);
+    return;
+  }
 
   const currentUnits = new Decimal(holding.units.toString());
   const currentAvg = new Decimal(holding.avgBuyPrice.toString());

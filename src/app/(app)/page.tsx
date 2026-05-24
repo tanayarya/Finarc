@@ -106,6 +106,10 @@ export default function DashboardPage() {
             <SavingsInterestReviewCard reviews={data.savingsInterestReviews} onDone={() => mutate()} />
           )}
 
+          {data.bondInterestReviews.length > 0 && (
+            <BondInterestReviewCard reviews={data.bondInterestReviews} onDone={() => mutate()} />
+          )}
+
           <div className="grid gap-3 lg:grid-cols-3">
             <SavingsCard
               net={data.summary.net}
@@ -208,6 +212,76 @@ export default function DashboardPage() {
         </>
       )}
     </div>
+  );
+}
+
+function BondInterestReviewCard({
+  reviews,
+  onDone,
+}: {
+  reviews: DashboardData["bondInterestReviews"];
+  onDone: () => void;
+}) {
+  const { formatCurrency } = useCurrency();
+  const primary = reviews[0];
+  const [netAmount, setNetAmount] = React.useState(primary.netAmount);
+  const [saving, setSaving] = React.useState(false);
+  const extraCount = reviews.length - 1;
+
+  React.useEffect(() => {
+    setNetAmount(primary.netAmount);
+  }, [primary.netAmount, primary.holdingId, primary.periodStart]);
+
+  const approve = async () => {
+    try {
+      setSaving(true);
+      await postJson("/api/bond-interest/approve", {
+        holdingId: primary.holdingId,
+        periodStart: primary.periodStart,
+        periodEnd: primary.periodEnd,
+        grossInterest: primary.grossInterest,
+        tdsAmount: primary.tdsAmount,
+        netAmount,
+      });
+      toast.success("Bond interest recorded");
+      onDone();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to record bond interest");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="border-sky-500/30 bg-sky-500/5">
+      <CardContent className="flex flex-col gap-3 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex gap-3">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-sky-500/15 text-sky-700 dark:text-sky-300">
+            <Landmark className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-sm font-medium">
+              Review bond interest for {primary.name}{extraCount > 0 ? `, plus ${extraCount} more` : ""}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Gross {formatCurrency(primary.grossInterest)} · TDS {formatCurrency(primary.tdsAmount)} · {format(new Date(primary.periodStart), "MMM d")} - {format(new Date(primary.periodEnd), "MMM d, yyyy")}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Input
+            className="h-9 tabular sm:w-36"
+            inputMode="decimal"
+            value={netAmount}
+            onChange={(e) => setNetAmount(e.target.value)}
+            aria-label="Bond interest net credited amount"
+          />
+          <Button size="sm" onClick={approve} disabled={saving}>
+            {saving ? "Saving..." : `Approve ${formatCurrency(netAmount)}`}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

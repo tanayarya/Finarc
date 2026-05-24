@@ -45,6 +45,21 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
       return ok({ updated: true });
     }
 
+    if (holding.type === "BOND" && (body.interestRate !== undefined || body.interestFreq !== undefined || body.maturityDate !== undefined || body.bondPayoutDay !== undefined || body.bondTdsRate !== undefined) && !body.tradeId) {
+      await prisma.holding.update({
+        where: { id: holdingId },
+        data: {
+          interestRate: body.interestRate !== undefined ? new Decimal(body.interestRate).toFixed(4) : undefined,
+          interestFreq: body.interestFreq,
+          maturityDate: body.maturityDate ? new Date(body.maturityDate) : undefined,
+          bondPayoutDay: body.bondPayoutDay === null ? null : body.bondPayoutDay !== undefined ? Number(body.bondPayoutDay) : undefined,
+          bondTdsRate: body.bondTdsRate !== undefined ? new Decimal(body.bondTdsRate).toFixed(4) : undefined,
+        },
+      });
+      await syncHoldingInterestRule(holdingId);
+      return ok({ updated: true });
+    }
+
     if (!tradeId) return fail("tradeId required", 400);
 
     let trade;

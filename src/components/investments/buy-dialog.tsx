@@ -37,6 +37,8 @@ interface FormValues {
   interestRate: string;
   interestFreq: string;
   maturityDate: string;
+  bondPayoutDay: string;
+  bondTdsRate: string;
   isRecurring: boolean;
   sipAmount: string;
   sipFrequency: string;
@@ -60,6 +62,7 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   const behaviorType = getTypeForAssetClass(assetClass);
   const sipEligible = isSipEligible(assetClass);
   const isFixedIncome = ["BOND", "FIXED_DEPOSIT"].includes(assetClass);
+  const isBond = assetClass === "BOND";
   const isPF = assetClass === "PROVIDENT_FUND";
   const isRD = assetClass === "RECURRING_DEPOSIT";
   const isCommodity = ["GOLD", "SILVER"].includes(assetClass);
@@ -204,7 +207,7 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
         });
 
         await postJson("/api/recurring", {
-          name: `SIP: ${holdingName}`,
+          name: `${isPF ? "PF" : "SIP"}: ${holdingName}`,
           type: "EXPENSE",
           amount: values.sipAmount,
           frequency: values.sipFrequency,
@@ -215,7 +218,7 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           holdingId: investment.holdingId,
         });
 
-        toast.success("Recurring investment set up");
+        toast.success(isPF ? "PF contribution set up" : "Recurring investment set up");
         onOpenChange(false);
         mutate("/api/investments");
         mutate("/api/recurring");
@@ -286,6 +289,10 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           interestRate: values.interestRate ? Number(values.interestRate) : undefined,
           interestFreq: values.interestFreq,
           maturityDate: values.maturityDate || undefined,
+          bondPayoutDay: values.assetClass === "BOND" && ["MONTHLY", "QUARTERLY"].includes(values.interestFreq) && values.bondPayoutDay
+            ? Number(values.bondPayoutDay)
+            : undefined,
+          bondTdsRate: values.assetClass === "BOND" && values.bondTdsRate !== "" ? Number(values.bondTdsRate) : undefined,
           applyCharges: false,
           skipTransaction,
         });
@@ -313,8 +320,8 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
         pricePerUnit: values.pricePerUnit,
         occurredAt: values.occurredAt,
         accountId: values.accountId,
-        notes: values.notes || undefined,
-        interestRate: values.interestRate ? Number(values.interestRate) : undefined,
+          notes: values.notes || undefined,
+          interestRate: values.interestRate ? Number(values.interestRate) : undefined,
           interestFreq: undefined,
           maturityDate: undefined,
         applyCharges: type === "STOCK" && !skipTransaction,
@@ -532,6 +539,18 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                   </Select>
                 )} />
               </div>
+              {isBond && ["MONTHLY", "QUARTERLY"].includes(form.watch("interestFreq")) ? (
+                <div className="space-y-1.5">
+                  <Label>Payout day</Label>
+                  <Input type="number" min={1} max={31} placeholder="27" {...form.register("bondPayoutDay")} />
+                </div>
+              ) : null}
+              {isBond ? (
+                <div className="space-y-1.5">
+                  <Label>TDS %</Label>
+                  <Input inputMode="decimal" placeholder="10" {...form.register("bondTdsRate")} />
+                </div>
+              ) : null}
               <div className="space-y-1.5">
                 <Label>Maturity</Label>
                 <Controller control={form.control} name="maturityDate" render={({ field }) => (
@@ -576,7 +595,9 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
 
           <DialogFooter className="gap-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Recording..." : isRD ? "Set up RD" : isRecurring ? "Set up SIP" : "Record purchase"}</Button>
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? "Recording..." : isRD ? "Set up RD" : isRecurring ? (isPF ? "Set up contribution" : "Set up SIP") : "Record purchase"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -597,6 +618,8 @@ function getDefaults(): FormValues {
     interestRate: "",
     interestFreq: "YEARLY",
     maturityDate: "",
+    bondPayoutDay: "",
+    bondTdsRate: "10",
     isRecurring: false,
     sipAmount: "",
     sipFrequency: "MONTHLY",

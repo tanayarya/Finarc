@@ -28,6 +28,7 @@ interface HoldingItem {
   type: string;
   assetClass?: string;
   invested?: number;
+  currentValue?: number;
   interestRate?: number | null;
   interestFreq?: string | null;
   maturityDate?: string | null;
@@ -83,7 +84,12 @@ export function SellDialog({
   React.useEffect(() => {
     if (open && holding) {
       const isFdOrBond = holding.type === "BOND" || holding.type === "FIXED_DEPOSIT";
-      const amount = isFdOrBond ? expectedFixedIncomeRedemption(holding, new Date()) : holding.currentPrice;
+      const isPf = holding.type === "PROVIDENT_FUND";
+      const amount = isFdOrBond
+        ? expectedFixedIncomeRedemption(holding, new Date())
+        : isPf
+          ? Number(holding.currentValue ?? holding.invested ?? holding.currentPrice)
+          : holding.currentPrice;
       form.reset({
         units: holding.units.toString(),
         pricePerUnit: amount.toFixed(2),
@@ -96,8 +102,9 @@ export function SellDialog({
   const onSubmit = form.handleSubmit(async (values) => {
     if (!holding) return;
     const isFdOrBond = holding.type === "BOND" || holding.type === "FIXED_DEPOSIT";
+    const isAmountRedemption = isFdOrBond || holding.type === "PROVIDENT_FUND";
 
-    if (!isFdOrBond) {
+    if (!isAmountRedemption) {
       if (!values.units || Number(values.units) <= 0) { toast.error("Enter valid units"); return; }
       if (Number(values.units) > holding.units) { toast.error(`Max ${holding.units} units available`); return; }
     }
@@ -106,13 +113,13 @@ export function SellDialog({
     try {
       await postJson("/api/investments/sell", {
         holdingId: holding.id,
-        units: isFdOrBond ? holding.units : Number(values.units),
-        pricePerUnit: isFdOrBond ? Number(values.pricePerUnit) / holding.units : Number(values.pricePerUnit),
+        units: isAmountRedemption ? holding.units : Number(values.units),
+        pricePerUnit: isAmountRedemption ? Number(values.pricePerUnit) / holding.units : Number(values.pricePerUnit),
         occurredAt: values.occurredAt,
         notes: values.notes || undefined,
         applyCharges: holding.type === "STOCK",
       });
-      toast.success(isFdOrBond ? "Redeemed — amount credited to account" : "Sell recorded — proceeds credited to account");
+      toast.success(isAmountRedemption ? "Redeemed — amount credited to account" : "Sell recorded — proceeds credited to account");
       onOpenChange(false);
       mutate("/api/investments");
       mutate((key) => typeof key === "string" && (key.startsWith("/api/accounts") || key.startsWith("/api/dashboard")), undefined, { revalidate: true });
@@ -124,6 +131,8 @@ export function SellDialog({
   if (!holding) return null;
 
   const isFdOrBond = holding.type === "BOND" || holding.type === "FIXED_DEPOSIT";
+  const isPf = holding.type === "PROVIDENT_FUND";
+  const isAmountRedemption = isFdOrBond || isPf;
   const redemptionDate = form.watch("occurredAt");
   const expectedAmount = isFdOrBond ? expectedFixedIncomeRedemption(holding, new Date(redemptionDate)) : null;
 
@@ -131,15 +140,17 @@ export function SellDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
-          <DialogTitle>{isFdOrBond ? "Redeem" : "Sell"} {holding.name}</DialogTitle>
+          <DialogTitle>{isAmountRedemption ? "Redeem" : "Sell"} {holding.name}</DialogTitle>
           <DialogDescription>
             {isFdOrBond
               ? `Enter the total amount you received (principal + interest earned).`
+              : isPf
+                ? `Enter the total PF amount credited back to your account.`
               : `${holding.symbol} · ${holding.units} units available · Current price ${formatCurrency(holding.currentPrice)}`}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
-          {!isFdOrBond && (
+          {!isAmountRedemption && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Units to sell</Label>
@@ -162,13 +173,15 @@ export function SellDialog({
               </div>
             </div>
           )}
-          {isFdOrBond && (
+          {isAmountRedemption && (
             <div className="space-y-1.5">
-              <Label>Redemption amount received</Label>
-              <Input inputMode="decimal" placeholder="Total amount (principal + interest)" {...form.register("pricePerUnit")} />
-              <p className="text-[10px] text-muted-foreground">
-                Expected {formatCurrency(expectedAmount)}. Edit if bank credited a different amount after TDS or penalties.
-              </p>
+              <Label>{isPf ? "PF amount received" : "Redemption amount received"}</Label>
+              <Input inputMode="decimal" placeholder={isPf ? "Total PF amount credited" : "Total amount (principal + interest)"} {...form.register("pricePerUnit")} />
+              {isFdOrBond ? (
+                <p className="text-[10px] text-muted-foreground">
+                  Expected {formatCurrency(expectedAmount)}. Edit if bank credited a different amount after TDS or penalties.
+                </p>
+              ) : null}
             </div>
           )}
           <div className="space-y-1.5">
@@ -198,7 +211,9 @@ export function SellDialog({
           )}
           <DialogFooter className="gap-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Selling..." : "Confirm sell"}</Button>
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? (isAmountRedemption ? "Redeeming..." : "Selling...") : (isAmountRedemption ? "Confirm redeem" : "Confirm sell")}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

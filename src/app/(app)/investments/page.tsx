@@ -41,12 +41,15 @@ interface HoldingItem {
   currentValue: number;
   pnl: number;
   pnlPercent: number;
+  incomeEarned?: number;
   lastPriceUpdate: string | null;
   accountId: string;
   accountName: string;
   interestRate: number | null;
   interestFreq: string | null;
   maturityDate: string | null;
+  bondPayoutDay?: number | null;
+  bondTdsRate?: number | null;
   recurringAmount?: number | null;
   purchaseDate: string;
   fixedIncomeLots?: { amount: number; occurredAt: string }[];
@@ -325,6 +328,7 @@ function HoldingsList({
         const Icon = TYPE_ICONS[h.type] ?? TrendingUp;
         const positive = h.pnl >= 0;
         const isFdBondPf = h.type === "FIXED_DEPOSIT" || h.type === "BOND" || h.type === "PROVIDENT_FUND";
+        const growthAmount = h.type === "BOND" && h.incomeEarned !== undefined ? h.incomeEarned : h.pnl;
         return (
           <Card key={h.id} className="transition-colors hover:border-foreground/20">
             <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
@@ -344,7 +348,12 @@ function HoldingsList({
                   <>
                     <div><p className="text-xs text-muted-foreground">Invested</p><p className="tabular font-medium">{formatCurrency(h.invested)}</p></div>
                     <div><p className="text-xs text-muted-foreground">Current value</p><p className="tabular font-medium">{formatCurrency(h.currentValue)}</p></div>
-                    <div><p className="text-xs text-muted-foreground">Growth</p><p className={cn("tabular font-medium", "text-emerald-600")}>{formatCurrency(h.pnl > 0 ? h.pnl : 0)}</p></div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">{h.type === "BOND" ? "Interest earned" : "Growth"}</p>
+                      <p className={cn("tabular font-medium", growthAmount >= 0 ? "text-emerald-600" : "text-rose-600")}>
+                        {formatCurrency(growthAmount > 0 ? growthAmount : 0)}
+                      </p>
+                    </div>
                     {h.interestRate && <div><p className="text-xs text-muted-foreground">Rate</p><p className="tabular font-medium">{h.interestRate}%</p></div>}
                   </>
                 ) : (
@@ -364,11 +373,15 @@ function HoldingsList({
                   {(h.type === "STOCK") && h.units > 0 && (
                     <Button variant="outline" size="sm" onClick={() => onAdd(h)}>Add</Button>
                   )}
-                  {h.type === "MUTUAL_FUND" && !h.recurringAmount && (
-                    <Button variant="outline" size="sm" onClick={() => onSip(h)}>SIP</Button>
+                  {(h.type === "MUTUAL_FUND" || h.type === "PROVIDENT_FUND") && !h.recurringAmount && (
+                    <Button variant="outline" size="sm" onClick={() => onSip(h)}>
+                      {h.type === "PROVIDENT_FUND" ? "Contribution" : "SIP"}
+                    </Button>
                   )}
-                  {h.type === "MUTUAL_FUND" && h.recurringAmount ? (
-                    <Badge variant="muted" className="self-center">SIP {formatCurrency(h.recurringAmount)}</Badge>
+                  {(h.type === "MUTUAL_FUND" || h.type === "PROVIDENT_FUND") && h.recurringAmount ? (
+                    <Badge variant="muted" className="self-center">
+                      {h.type === "PROVIDENT_FUND" ? "PF" : "SIP"} {formatCurrency(h.recurringAmount)}
+                    </Badge>
                   ) : null}
                   <Button variant="outline" size="sm" onClick={() => onEdit(h)}>Edit</Button>
                   {h.units > 0 && (
@@ -487,8 +500,10 @@ function HoldingsTable({
                         {h.type === "STOCK" && h.units > 0 && (
                           <DropdownMenuItem onClick={() => onAdd(h)}>Add quantities</DropdownMenuItem>
                         )}
-                        {h.type === "MUTUAL_FUND" && !h.recurringAmount && (
-                          <DropdownMenuItem onClick={() => onSip(h)}>Set up SIP</DropdownMenuItem>
+                        {(h.type === "MUTUAL_FUND" || h.type === "PROVIDENT_FUND") && !h.recurringAmount && (
+                          <DropdownMenuItem onClick={() => onSip(h)}>
+                            {h.type === "PROVIDENT_FUND" ? "Set up contribution" : "Set up SIP"}
+                          </DropdownMenuItem>
                         )}
                         <DropdownMenuItem onClick={() => onEdit(h)}>Edit</DropdownMenuItem>
                         {h.units > 0 && (

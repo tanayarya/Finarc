@@ -14,6 +14,7 @@ import { materializeDueRecurring } from "@/lib/services/recurring";
 import { getPortfolioSummary } from "@/lib/services/investments";
 import { runAllNotifications } from "@/lib/services/notifications";
 import { pendingSavingsInterestReviews } from "@/lib/services/savings-interest";
+import { pendingBondInterestReviews } from "@/lib/services/bond-interest";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { addDays, endOfDay } from "date-fns";
@@ -48,6 +49,7 @@ export async function GET(req: NextRequest) {
       recentTxns,
       upcoming,
       savingsInterestReviews,
+      bondInterestReviews,
     ] = await Promise.all([
       computeNetWorth(),
       totalsForRange(range),
@@ -63,6 +65,7 @@ export async function GET(req: NextRequest) {
       }),
       upcomingRecurring(new Date(), addDays(new Date(), 14)),
       pendingSavingsInterestReviews(),
+      pendingBondInterestReviews(),
     ]);
 
     const creditAccounts = await prisma.account.findMany({
@@ -183,6 +186,21 @@ export async function GET(req: NextRequest) {
         periodEnd: r.periodEnd.toISOString(),
         dueDate: r.dueDate.toISOString(),
         amount: r.amount.toFixed(2),
+      })),
+      bondInterestReviews: bondInterestReviews.map((r) => ({
+        holdingId: r.holdingId,
+        name: r.name,
+        accountId: r.accountId,
+        accountName: r.accountName,
+        periodStart: r.periodStart.toISOString(),
+        periodEnd: r.periodEnd.toISOString(),
+        dueDate: r.dueDate.toISOString(),
+        principal: r.principal.toFixed(2),
+        rate: r.rate.toString(),
+        tdsRate: r.tdsRate.toString(),
+        grossInterest: r.grossInterest.toFixed(2),
+        tdsAmount: r.tdsAmount.toFixed(2),
+        netAmount: r.netAmount.toFixed(2),
       })),
     });
   } catch (e) {

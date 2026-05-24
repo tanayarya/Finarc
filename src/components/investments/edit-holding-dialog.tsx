@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { mutate } from "swr";
 import { toast } from "sonner";
 
@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { patchJson } from "@/lib/fetcher";
 
 interface HoldingItem {
@@ -25,6 +26,8 @@ interface HoldingItem {
   interestRate?: number | null;
   interestFreq?: string | null;
   maturityDate?: string | null;
+  bondPayoutDay?: number | null;
+  bondTdsRate?: number | null;
   recurringAmount?: number | null;
 }
 
@@ -33,7 +36,10 @@ interface FormValues {
   pricePerUnit: string;
   recurringAmount: string;
   interestRate: string;
+  interestFreq: string;
   maturityDate: string;
+  bondPayoutDay: string;
+  bondTdsRate: string;
 }
 
 export function EditHoldingDialog({
@@ -46,7 +52,7 @@ export function EditHoldingDialog({
   holding: HoldingItem | null;
 }) {
   const form = useForm<FormValues>({
-    defaultValues: { units: "", pricePerUnit: "", recurringAmount: "", interestRate: "", maturityDate: "" },
+    defaultValues: { units: "", pricePerUnit: "", recurringAmount: "", interestRate: "", interestFreq: "YEARLY", maturityDate: "", bondPayoutDay: "", bondTdsRate: "10" },
   });
 
   React.useEffect(() => {
@@ -60,7 +66,10 @@ export function EditHoldingDialog({
           : holding.avgBuyPrice.toString(),
         recurringAmount: holding.recurringAmount ? String(holding.recurringAmount) : "",
         interestRate: holding.interestRate ? String(holding.interestRate) : "",
+        interestFreq: holding.interestFreq ?? "YEARLY",
         maturityDate: holding.maturityDate ? holding.maturityDate.slice(0, 10) : "",
+        bondPayoutDay: holding.bondPayoutDay ? String(holding.bondPayoutDay) : "",
+        bondTdsRate: holding.bondTdsRate !== null && holding.bondTdsRate !== undefined ? String(holding.bondTdsRate) : "10",
       });
     }
   }, [open, holding, form]);
@@ -91,6 +100,16 @@ export function EditHoldingDialog({
     if (!values.pricePerUnit || Number(values.pricePerUnit) <= 0) { toast.error("Enter valid price"); return; }
 
     try {
+      if (holding.type === "BOND") {
+        if (!values.interestRate || Number(values.interestRate) <= 0) { toast.error("Enter interest rate"); return; }
+        await patchJson(`/api/investments/${holding.id}`, {
+          interestRate: Number(values.interestRate),
+          interestFreq: values.interestFreq,
+          maturityDate: values.maturityDate || undefined,
+          bondPayoutDay: ["MONTHLY", "QUARTERLY"].includes(values.interestFreq) && values.bondPayoutDay ? Number(values.bondPayoutDay) : null,
+          bondTdsRate: values.bondTdsRate !== "" ? Number(values.bondTdsRate) : 10,
+        });
+      }
       // For simplicity, we'll call the edit API with the holding ID
       // The API will find the most recent BUY trade and update it
       const isAmountOnly = ["FIXED_DEPOSIT", "BOND"].includes(holding.type) || holding.assetClass === "RECURRING_DEPOSIT";
@@ -154,6 +173,43 @@ export function EditHoldingDialog({
                 <Label>{isSingleAmount ? "Total amount" : "Average buy price"}</Label>
                 <Input inputMode="decimal" {...form.register("pricePerUnit")} />
               </div>
+              {holding.type === "BOND" ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Interest %</Label>
+                    <Input inputMode="decimal" {...form.register("interestRate")} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Payout</Label>
+                    <Controller control={form.control} name="interestFreq" render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="MONTHLY">Monthly</SelectItem>
+                          <SelectItem value="QUARTERLY">Quarterly</SelectItem>
+                          <SelectItem value="HALF_YEARLY">Half-yearly</SelectItem>
+                          <SelectItem value="YEARLY">Yearly</SelectItem>
+                          <SelectItem value="ON_MATURITY">On maturity</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )} />
+                  </div>
+                  {["MONTHLY", "QUARTERLY"].includes(form.watch("interestFreq")) ? (
+                    <div className="space-y-1.5">
+                      <Label>Payout day</Label>
+                      <Input type="number" min={1} max={31} {...form.register("bondPayoutDay")} />
+                    </div>
+                  ) : null}
+                  <div className="space-y-1.5">
+                    <Label>TDS %</Label>
+                    <Input inputMode="decimal" {...form.register("bondTdsRate")} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Maturity</Label>
+                    <Input type="date" {...form.register("maturityDate")} />
+                  </div>
+                </div>
+              ) : null}
               <p className="text-xs text-muted-foreground">
                 If a bank transaction was linked, its amount will be adjusted to match the new value.
               </p>

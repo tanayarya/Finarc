@@ -264,6 +264,8 @@ model Holding {
   interestFreq    InterestFrequency?
   maturityDate    DateTime?
   principalAmount Decimal?       @db.Decimal(18, 2)
+  bondPayoutDay   Int?
+  bondTdsRate     Decimal?       @db.Decimal(6, 4)
   // MF SIP
   sipRuleId       String?
   sipRule         RecurringRule? @relation(fields: [sipRuleId], references: [id], onDelete: SetNull)

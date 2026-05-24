@@ -28,6 +28,8 @@ export async function POST(req: NextRequest) {
       interestRate: body.interestRate ? Number(body.interestRate) : undefined,
       interestFreq: body.interestFreq,
       maturityDate: body.maturityDate ? new Date(body.maturityDate) : undefined,
+      bondPayoutDay: body.bondPayoutDay ? Number(body.bondPayoutDay) : undefined,
+      bondTdsRate: body.bondTdsRate !== undefined && body.bondTdsRate !== "" ? Number(body.bondTdsRate) : undefined,
       applyCharges: body.applyCharges,
       assetClass: body.assetClass,
       skipTransaction: body.skipTransaction ?? false,
