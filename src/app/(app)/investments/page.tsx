@@ -26,6 +26,7 @@ import { BuyDialog } from "@/components/investments/buy-dialog";
 import { SellDialog } from "@/components/investments/sell-dialog";
 import { AddQuantityDialog } from "@/components/investments/add-quantity-dialog";
 import { EditHoldingDialog } from "@/components/investments/edit-holding-dialog";
+import { SipDialog } from "@/components/investments/sip-dialog";
 
 interface HoldingItem {
   id: string;
@@ -93,6 +94,7 @@ export default function InvestmentsPage() {
   const [sellHolding, setSellHolding] = React.useState<HoldingItem | null>(null);
   const [addHolding, setAddHolding] = React.useState<HoldingItem | null>(null);
   const [editHolding, setEditHolding] = React.useState<HoldingItem | null>(null);
+  const [sipHolding, setSipHolding] = React.useState<HoldingItem | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
   const [viewMode, setViewMode] = React.useState<"grid" | "list">(() => {
     if (typeof window !== "undefined") {
@@ -282,13 +284,13 @@ export default function InvestmentsPage() {
                 </Button>
               </div>
             </div>
-            <TabsContent value="all">{viewMode === "grid" ? <HoldingsList holdings={holdings} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} /> : <HoldingsTable holdings={holdings} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} />}</TabsContent>
-            <TabsContent value="stocks">{viewMode === "grid" ? <HoldingsList holdings={stocks} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} /> : <HoldingsTable holdings={stocks} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} />}</TabsContent>
-            <TabsContent value="mf">{viewMode === "grid" ? <HoldingsList holdings={mfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} /> : <HoldingsTable holdings={mfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} />}</TabsContent>
-            <TabsContent value="bonds">{viewMode === "grid" ? <HoldingsList holdings={bonds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} /> : <HoldingsTable holdings={bonds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} />}</TabsContent>
-            <TabsContent value="fd">{viewMode === "grid" ? <HoldingsList holdings={fds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} /> : <HoldingsTable holdings={fds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} />}</TabsContent>
-            <TabsContent value="rd">{viewMode === "grid" ? <HoldingsList holdings={rds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} /> : <HoldingsTable holdings={rds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} />}</TabsContent>
-            <TabsContent value="pf">{viewMode === "grid" ? <HoldingsList holdings={pfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} /> : <HoldingsTable holdings={pfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} />}</TabsContent>
+            <TabsContent value="all">{viewMode === "grid" ? <HoldingsList holdings={holdings} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable holdings={holdings} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
+            <TabsContent value="stocks">{viewMode === "grid" ? <HoldingsList holdings={stocks} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable holdings={stocks} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
+            <TabsContent value="mf">{viewMode === "grid" ? <HoldingsList holdings={mfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable holdings={mfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
+            <TabsContent value="bonds">{viewMode === "grid" ? <HoldingsList holdings={bonds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable holdings={bonds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
+            <TabsContent value="fd">{viewMode === "grid" ? <HoldingsList holdings={fds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable holdings={fds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
+            <TabsContent value="rd">{viewMode === "grid" ? <HoldingsList holdings={rds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable holdings={rds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
+            <TabsContent value="pf">{viewMode === "grid" ? <HoldingsList holdings={pfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable holdings={pfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
           </Tabs>
         </>
       )}
@@ -297,6 +299,7 @@ export default function InvestmentsPage() {
       <SellDialog open={Boolean(sellHolding)} onOpenChange={(o) => { if (!o) setSellHolding(null); }} holding={sellHolding} />
       <AddQuantityDialog open={Boolean(addHolding)} onOpenChange={(o) => { if (!o) setAddHolding(null); }} holding={addHolding} />
       <EditHoldingDialog open={Boolean(editHolding)} onOpenChange={(o) => { if (!o) setEditHolding(null); }} holding={editHolding} />
+      <SipDialog open={Boolean(sipHolding)} onOpenChange={(o) => { if (!o) setSipHolding(null); }} holding={sipHolding} />
     </div>
   );
 }
@@ -307,12 +310,14 @@ function HoldingsList({
   onSell,
   onAdd,
   onEdit,
+  onSip,
 }: {
   holdings: HoldingItem[];
   formatCurrency: (v: number | string | null | undefined) => string;
   onSell: (h: HoldingItem) => void;
   onAdd: (h: HoldingItem) => void;
   onEdit: (h: HoldingItem) => void;
+  onSip: (h: HoldingItem) => void;
 }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
@@ -359,6 +364,12 @@ function HoldingsList({
                   {(h.type === "STOCK") && h.units > 0 && (
                     <Button variant="outline" size="sm" onClick={() => onAdd(h)}>Add</Button>
                   )}
+                  {h.type === "MUTUAL_FUND" && !h.recurringAmount && (
+                    <Button variant="outline" size="sm" onClick={() => onSip(h)}>SIP</Button>
+                  )}
+                  {h.type === "MUTUAL_FUND" && h.recurringAmount ? (
+                    <Badge variant="muted" className="self-center">SIP {formatCurrency(h.recurringAmount)}</Badge>
+                  ) : null}
                   <Button variant="outline" size="sm" onClick={() => onEdit(h)}>Edit</Button>
                   {h.units > 0 && (
                     <Button variant="outline" size="sm" onClick={() => onSell(h)}>
@@ -382,12 +393,14 @@ function HoldingsTable({
   onSell,
   onAdd,
   onEdit,
+  onSip,
 }: {
   holdings: HoldingItem[];
   formatCurrency: (v: number | string | null | undefined) => string;
   onSell: (h: HoldingItem) => void;
   onAdd: (h: HoldingItem) => void;
   onEdit: (h: HoldingItem) => void;
+  onSip: (h: HoldingItem) => void;
 }) {
   return (
     <Card>
@@ -449,6 +462,9 @@ function HoldingsTable({
                       <DropdownMenuContent align="end">
                         {h.type === "STOCK" && h.units > 0 && (
                           <DropdownMenuItem onClick={() => onAdd(h)}>Add quantities</DropdownMenuItem>
+                        )}
+                        {h.type === "MUTUAL_FUND" && !h.recurringAmount && (
+                          <DropdownMenuItem onClick={() => onSip(h)}>Set up SIP</DropdownMenuItem>
                         )}
                         <DropdownMenuItem onClick={() => onEdit(h)}>Edit</DropdownMenuItem>
                         {h.units > 0 && (

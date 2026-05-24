@@ -10,7 +10,7 @@ export async function GET() {
   try {
     const rules = await prisma.recurringRule.findMany({
       orderBy: { nextRunDate: "asc" },
-      include: { account: true, toAccount: true, category: true },
+      include: { account: true, toAccount: true, category: true, sipHoldings: true },
     });
     return ok(serialize(rules));
   } catch (e) {

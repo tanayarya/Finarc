@@ -38,6 +38,7 @@ interface RecurringRule {
   account: { id: string; name: string } | null;
   toAccount: { id: string; name: string } | null;
   category: { id: string; name: string } | null;
+  sipHoldings?: Array<{ id: string; assetClass: string; type: string; name: string }>;
 }
 
 interface PreviewItem {
@@ -177,7 +178,7 @@ export default function RecurringPage() {
                     {(rules ?? []).map((r) => (
                       <TableRow key={r.id}>
                         <TableCell className="font-medium">{r.name}</TableCell>
-                        <TableCell><Badge variant="muted" className="text-[10px]">{r.type}</Badge></TableCell>
+                        <TableCell><Badge variant={ruleKind(r).variant} className="text-[10px]">{ruleKind(r).label}</Badge></TableCell>
                         <TableCell className="text-sm text-muted-foreground">{r.frequency.toLowerCase()}{r.interval > 1 ? ` (×${r.interval})` : ""}</TableCell>
                         <TableCell className="text-right tabular">{formatCurrency(r.amount)}</TableCell>
                         <TableCell className="text-sm">{r.status === "ACTIVE" ? format(new Date(r.nextRunDate), "MMM d") : "—"}</TableCell>
@@ -269,7 +270,7 @@ function RuleSection({
             <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
               <div>
                 <CardDescription className="flex items-center gap-2">
-                  <Badge variant={r.type === "INCOME" ? "success" : r.type === "EXPENSE" ? "destructive" : "muted"} className="text-[10px]">{r.type}</Badge>
+                  <Badge variant={ruleKind(r).variant} className="text-[10px]">{ruleKind(r).label}</Badge>
                   {r.frequency.toLowerCase()}{r.interval > 1 ? ` (every ${r.interval})` : ""}
                 </CardDescription>
                 <CardTitle className="mt-1 text-base">{r.name}</CardTitle>
@@ -305,4 +306,11 @@ function RuleSection({
       </div>
     </section>
   );
+}
+
+function ruleKind(rule: RecurringRule): { label: string; variant: "success" | "destructive" | "muted" | "warning" } {
+  if (rule.sipHoldings?.length) return { label: "Investment", variant: "muted" };
+  if (rule.type === "INCOME") return { label: "Income", variant: "success" };
+  if (rule.type === "EXPENSE") return { label: "Expense", variant: "destructive" };
+  return { label: "Transfer", variant: "muted" };
 }

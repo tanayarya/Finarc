@@ -31,10 +31,11 @@ export async function POST(req: NextRequest) {
       applyCharges: body.applyCharges,
       assetClass: body.assetClass,
       skipTransaction: body.skipTransaction ?? false,
+      skipTrade: body.skipTrade ?? false,
     });
     return ok({
       holdingId: result.holding.id,
-      tradeId: result.trade.id,
+      tradeId: result.trade?.id ?? null,
       charges: result.charges,
     }, 201);
   } catch (e) {

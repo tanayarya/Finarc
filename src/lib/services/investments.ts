@@ -4,6 +4,7 @@ import { toMoney, ZERO } from "@/lib/money";
 import { calculateCharges, type ChargeRates, DEFAULT_CHARGE_RATES } from "@/lib/finance/trading-charges";
 import { nextOccurrence } from "@/lib/finance/dates";
 import type { Holding, InvestmentType, TradeAction } from "@prisma/client";
+import { startOfDay } from "date-fns";
 
 // ─── Charge settings from settings ─────────────────────────────────────
 
@@ -69,6 +70,8 @@ interface BuyInput {
   applyCharges?: boolean;
   // Skip creating a transaction (for migrating existing holdings)
   skipTransaction?: boolean;
+  // Create/merge the holding shell without writing a buy trade.
+  skipTrade?: boolean;
 }
 
 export async function buyInvestment(input: BuyInput) {
@@ -98,7 +101,9 @@ export async function buyInvestment(input: BuyInput) {
       })
     : null;
 
+  const ensureOnly = input.skipTransaction && input.skipTrade && amount === 0;
   if (holding) {
+    if (ensureOnly) return { holding, trade: null, transaction: null, charges };
     // Update weighted average buy price and units
     const existingUnits = new Decimal(holding.units.toString());
     const existingAvg = new Decimal(holding.avgBuyPrice.toString());
@@ -168,22 +173,23 @@ export async function buyInvestment(input: BuyInput) {
     });
   }
 
-  // Create trade record
-  const trade = await prisma.trade.create({
-    data: {
-      holdingId: holding.id,
-      action: "BUY",
-      units: input.units.toFixed(6),
-      price: input.pricePerUnit.toFixed(4),
-      amount: amount.toFixed(2),
-      charges: charges.total.toFixed(2),
-      chargesJson: JSON.stringify(charges),
-      netAmount: netAmount.toFixed(2),
-      occurredAt: input.occurredAt,
-      transactionId: txn?.id ?? null,
-      notes: input.skipTransaction ? "Existing holding (no transaction)" : input.notes,
-    },
-  });
+  const trade = input.skipTrade
+    ? null
+    : await prisma.trade.create({
+        data: {
+          holdingId: holding.id,
+          action: "BUY",
+          units: input.units.toFixed(6),
+          price: input.pricePerUnit.toFixed(4),
+          amount: amount.toFixed(2),
+          charges: charges.total.toFixed(2),
+          chargesJson: JSON.stringify(charges),
+          netAmount: netAmount.toFixed(2),
+          occurredAt: input.occurredAt,
+          transactionId: txn?.id ?? null,
+          notes: input.skipTransaction ? "Existing holding (no transaction)" : input.notes,
+        },
+      });
 
   await syncFixedIncomeInterestRule(holding.id, input.occurredAt);
 
@@ -567,6 +573,47 @@ async function fetchMFNav(schemeCode: string): Promise<number | null> {
   } catch {
     return null;
   }
+}
+
+export async function fetchMFNavForDate(
+  schemeCode: string,
+  targetDate: Date
+): Promise<{ nav: number; navDate: Date } | null> {
+  const target = startOfDay(targetDate);
+  try {
+    const latest = await fetch(`https://api.mfapi.in/mf/${schemeCode}/latest`);
+    if (latest.ok) {
+      const latestData = await latest.json();
+      const row = latestData?.data?.[0];
+      const navDate = parseMfApiDate(row?.date);
+      const nav = row?.nav ? parseFloat(row.nav) : null;
+      if (nav && navDate && navDate >= target) return { nav, navDate };
+    }
+  } catch {}
+
+  try {
+    const res = await fetch(`https://api.mfapi.in/mf/${schemeCode}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rows = Array.isArray(data?.data) ? data.data : [];
+    let best: { nav: number; navDate: Date } | null = null;
+    for (const row of rows) {
+      const navDate = parseMfApiDate(row?.date);
+      const nav = row?.nav ? parseFloat(row.nav) : null;
+      if (!nav || !navDate || navDate < target) continue;
+      if (!best || navDate < best.navDate) best = { nav, navDate };
+    }
+    return best;
+  } catch {
+    return null;
+  }
+}
+
+function parseMfApiDate(value: unknown) {
+  if (typeof value !== "string") return null;
+  const [dd, mm, yyyy] = value.split("-").map(Number);
+  if (!dd || !mm || !yyyy) return null;
+  return startOfDay(new Date(yyyy, mm - 1, dd));
 }
 
 function round2(n: number) {

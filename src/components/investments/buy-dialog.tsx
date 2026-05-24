@@ -189,7 +189,20 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
         const holdingSymbol = values.symbol || values.assetClass;
         const holdingName = values.name || getAssetLabel(values.assetClass);
 
-        // Create recurring rule
+        const investment = await postJson<{ holdingId: string }>("/api/investments", {
+          type,
+          assetClass: values.assetClass,
+          symbol: holdingSymbol,
+          name: holdingName,
+          units: 0,
+          pricePerUnit: 0,
+          occurredAt: values.occurredAt,
+          accountId: values.accountId,
+          applyCharges: false,
+          skipTransaction: true,
+          skipTrade: true,
+        });
+
         await postJson("/api/recurring", {
           name: `SIP: ${holdingName}`,
           type: "EXPENSE",
@@ -199,22 +212,8 @@ export function BuyDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           startDate: values.occurredAt,
           description: `Recurring ${getAssetLabel(values.assetClass)} contribution`,
           accountId: values.accountId,
+          holdingId: investment.holdingId,
         });
-
-        // Ensure a holding exists (buyInvestment will find existing or create new)
-        // Use 0 units + 0 price so it doesn't affect balance if holding already exists
-        // The backend findFirst will match by symbol+account+type and just update
-        await postJson("/api/investments", {
-          type,
-          assetClass: values.assetClass,
-          symbol: holdingSymbol,
-          name: holdingName,
-          units: 0.000001, // minimal to trigger find-or-create
-          pricePerUnit: 0.01,
-          occurredAt: values.occurredAt,
-          accountId: values.accountId,
-          applyCharges: false, skipTransaction,
-        }).catch(() => {}); // Ignore if holding already exists
 
         toast.success("Recurring investment set up");
         onOpenChange(false);
