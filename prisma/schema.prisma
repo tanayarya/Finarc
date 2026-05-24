@@ -22,6 +22,11 @@ enum AccountType {
   INVESTMENT
 }
 
+enum SavingsInterestFrequency {
+  MONTHLY
+  QUARTERLY
+}
+
 enum TransactionType {
   INCOME
   EXPENSE
@@ -75,6 +80,8 @@ model Account {
   // Investment placeholder
   institution     String?
   notes           String?
+  savingsInterestRate      Decimal?                  @db.Decimal(6, 4)
+  savingsInterestFrequency SavingsInterestFrequency?
   archived        Boolean     @default(false)
   color           String?
   icon            String?

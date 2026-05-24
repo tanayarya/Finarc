@@ -16,6 +16,19 @@ const positiveDecimal = z
   })
   .refine((v) => Number(v) > 0, { message: "Amount must be greater than zero" });
 
+const optionalRate = z
+  .union([z.string(), z.number(), z.null()])
+  .optional()
+  .transform((v) => (v === undefined ? undefined : v === null || v === "" ? null : v.toString()))
+  .refine((v) => v === undefined || v === null || /^\d+(\.\d{1,4})?$/.test(v), {
+    message: "Enter a valid rate",
+  })
+  .refine((v) => v === undefined || v === null || (Number(v) >= 0 && Number(v) <= 100), {
+    message: "Rate must be between 0 and 100",
+  });
+
+const savingsInterestFrequencySchema = z.enum(["MONTHLY", "QUARTERLY"]);
+
 export const accountTypeSchema = z.enum([
   "SAVINGS",
   "CASH",
@@ -38,6 +51,8 @@ export const accountCreateSchema = z
     loanEndDate: z.coerce.date().optional(),
     institution: z.string().trim().max(80).optional().nullable(),
     notes: z.string().trim().max(500).optional().nullable(),
+    savingsInterestRate: optionalRate,
+    savingsInterestFrequency: savingsInterestFrequencySchema.optional().nullable(),
     color: z.string().trim().max(20).optional().nullable(),
     icon: z.string().trim().max(40).optional().nullable(),
   })
@@ -56,6 +71,10 @@ export const accountCreateSchema = z
         message: "Loan principal required",
       });
     }
+    if (data.type !== "SAVINGS") {
+      data.savingsInterestRate = undefined;
+      data.savingsInterestFrequency = undefined;
+    }
   });
 
 export const accountUpdateSchema = z.object({
@@ -65,6 +84,8 @@ export const accountUpdateSchema = z.object({
   dueDay: z.number().int().min(1).max(28).optional().nullable(),
   institution: z.string().trim().max(80).optional().nullable(),
   notes: z.string().trim().max(500).optional().nullable(),
+  savingsInterestRate: optionalRate,
+  savingsInterestFrequency: savingsInterestFrequencySchema.optional().nullable(),
   color: z.string().trim().max(20).optional().nullable(),
   icon: z.string().trim().max(40).optional().nullable(),
   archived: z.boolean().optional(),

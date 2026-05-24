@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import useSWR, { mutate } from "swr";
-import { ArrowLeft, Archive, Plus, Pencil } from "lucide-react";
+import { ArrowLeft, Archive, ArchiveRestore, Plus, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -20,7 +20,7 @@ import { TransactionDialog } from "@/components/transactions/transaction-dialog"
 import { AccountEditDialog } from "@/components/accounts/account-edit-dialog";
 import { useConfirm } from "@/components/confirm-provider";
 import { useCurrency } from "@/components/currency-provider";
-import { delJson } from "@/lib/fetcher";
+import { delJson, patchJson } from "@/lib/fetcher";
 import { formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { TransactionRow as TxRow, AccountWithBalance } from "@/hooks/use-data";
@@ -80,6 +80,17 @@ export default function AccountDetailPage() {
     }
   };
 
+  const onRestore = async () => {
+    try {
+      await patchJson(`/api/accounts/${a.id}`, { archived: false });
+      toast.success("Account restored");
+      mutate((key) => typeof key === "string" && key.startsWith("/api/accounts"), undefined, { revalidate: true });
+      mutate(`/api/accounts/${a.id}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to restore");
+    }
+  };
+
   const defaultType = a.type === "CREDIT" ? "EXPENSE" : a.type === "LOAN" ? "LOAN_PAYMENT" : "EXPENSE";
 
   return (
@@ -88,6 +99,7 @@ export default function AccountDetailPage() {
         <Button asChild variant="ghost" size="icon"><Link href="/accounts"><ArrowLeft className="h-4 w-4" /><span className="sr-only">Back</span></Link></Button>
         <h2 className="text-xl font-semibold tracking-tight md:text-2xl">{a.name}</h2>
         <Badge variant="muted" className="ml-2">{a.type}</Badge>
+        {a.archived ? <Badge variant="warning">Archived</Badge> : null}
       </div>
 
       <div className="grid gap-3 lg:grid-cols-3">
@@ -105,6 +117,12 @@ export default function AccountDetailPage() {
               <div><p className="text-xs text-muted-foreground">Currency</p><p className="font-medium">{a.currency}</p></div>
               {a.institution ? <div><p className="text-xs text-muted-foreground">Institution</p><p className="font-medium">{a.institution}</p></div> : null}
               {a.dueDay ? <div><p className="text-xs text-muted-foreground">Due day</p><p className="font-medium">{a.dueDay}</p></div> : null}
+              {a.type === "SAVINGS" && a.savingsInterestRate ? (
+                <div>
+                  <p className="text-xs text-muted-foreground">Savings interest</p>
+                  <p className="font-medium">{a.savingsInterestRate}% · {(a.savingsInterestFrequency ?? "QUARTERLY").toLowerCase()}</p>
+                </div>
+              ) : null}
             </div>
             {util !== null ? (
               <>
@@ -123,10 +141,14 @@ export default function AccountDetailPage() {
         <Card>
           <CardHeader><CardTitle className="text-sm">Actions</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            <Button className="w-full justify-start gap-2" onClick={() => setTxOpen(true)}><Plus className="h-4 w-4" /> Record transaction</Button>
+            <Button className="w-full justify-start gap-2" onClick={() => setTxOpen(true)} disabled={a.archived}><Plus className="h-4 w-4" /> Record transaction</Button>
             <Button variant="outline" className="w-full justify-start gap-2" onClick={() => setEditOpen(true)}><Pencil className="h-4 w-4" /> Edit account</Button>
-            <Button variant="outline" className="w-full justify-start gap-2" onClick={onArchive}><Archive className="h-4 w-4" /> Archive account</Button>
-            <p className="pt-2 text-xs text-muted-foreground">Manual balance editing is intentionally disabled. Adjustments must flow through transactions.</p>
+            {a.archived ? (
+              <Button variant="outline" className="w-full justify-start gap-2" onClick={onRestore}><ArchiveRestore className="h-4 w-4" /> Restore account</Button>
+            ) : (
+              <Button variant="outline" className="w-full justify-start gap-2" onClick={onArchive}><Archive className="h-4 w-4" /> Archive account</Button>
+            )}
+            <p className="pt-2 text-xs text-muted-foreground">{a.archived ? "Archived accounts are hidden from active lists, but their ledger stays preserved." : "Manual balance editing is intentionally disabled. Adjustments must flow through transactions."}</p>
           </CardContent>
         </Card>
       </div>

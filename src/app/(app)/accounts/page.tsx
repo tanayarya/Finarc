@@ -33,16 +33,19 @@ const TYPE_META = {
 } as const;
 
 export default function AccountsPage() {
-  const { data, isLoading } = useAccounts();
   const { formatCurrency } = useCurrency();
   const [search, setSearch] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState<string>("ALL");
+  const [statusFilter, setStatusFilter] = React.useState<string>("ACTIVE");
+  const { data, isLoading } = useAccounts(statusFilter !== "ACTIVE");
 
   const allAccounts = data ?? [];
   const accounts = allAccounts.filter((a) => {
     const matchesSearch = !search || a.name.toLowerCase().includes(search.toLowerCase()) || (a.institution ?? "").toLowerCase().includes(search.toLowerCase());
     const matchesType = typeFilter === "ALL" || a.type === typeFilter;
-    return matchesSearch && matchesType;
+    const matchesStatus =
+      statusFilter === "ALL" || (statusFilter === "ARCHIVED" ? a.archived : !a.archived);
+    return matchesSearch && matchesType && matchesStatus;
   });
 
   const grouped = accounts.reduce<Record<string, AccountWithBalance[]>>((acc, a) => {
@@ -50,13 +53,14 @@ export default function AccountsPage() {
     return acc;
   }, {});
 
-  const totalAssets = allAccounts
+  const activeAccounts = allAccounts.filter((a) => !a.archived);
+  const totalAssets = activeAccounts
     .reduce((s, a) => {
       const balance = Number(a.balance);
       if (TYPE_META[a.type].asset) return s + balance;
       return balance < 0 ? s + Math.abs(balance) : s;
     }, 0);
-  const totalLiab = allAccounts
+  const totalLiab = activeAccounts
     .filter((a) => !TYPE_META[a.type].asset)
     .reduce((s, a) => s + Math.max(0, Number(a.balance)), 0);
 
@@ -134,6 +138,14 @@ export default function AccountsPage() {
             <SelectItem value="INVESTMENT">Investment</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="h-9 w-[150px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ACTIVE">Active</SelectItem>
+            <SelectItem value="ARCHIVED">Archived</SelectItem>
+            <SelectItem value="ALL">All</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {isLoading ? (
@@ -146,7 +158,7 @@ export default function AccountsPage() {
         <EmptyState
           icon={<Wallet className="h-5 w-5" />}
           title="No accounts yet"
-          description="Add your first savings, credit, loan, or investment account to start tracking."
+          description={statusFilter === "ARCHIVED" ? "No archived accounts match this view." : "Add your first savings, credit, loan, or investment account to start tracking."}
           action={
             <AccountDialog
               trigger={
@@ -203,7 +215,7 @@ function AccountCard({ account }: { account: AccountWithBalance }) {
             <CardTitle className="text-base">{account.name}</CardTitle>
           </div>
           <Badge variant={meta.asset ? "success" : "warning"}>
-            {meta.asset ? "Asset" : "Liability"}
+            {account.archived ? "Archived" : meta.asset ? "Asset" : "Liability"}
           </Badge>
         </CardHeader>
         <CardContent className="space-y-3">

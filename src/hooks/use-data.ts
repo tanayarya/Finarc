@@ -15,6 +15,8 @@ export interface AccountWithBalance {
   archived: boolean;
   institution: string | null;
   notes: string | null;
+  savingsInterestRate: string | null;
+  savingsInterestFrequency: "MONTHLY" | "QUARTERLY" | null;
   color: string | null;
   icon: string | null;
 }
@@ -60,8 +62,8 @@ export interface BudgetWithProgress {
   periodEnd: string;
 }
 
-export function useAccounts() {
-  return useSWR<AccountWithBalance[]>("/api/accounts");
+export function useAccounts(includeArchived = false) {
+  return useSWR<AccountWithBalance[]>(`/api/accounts${includeArchived ? "?includeArchived=1" : ""}`);
 }
 
 export function useCategories(kind?: "INCOME" | "EXPENSE") {
@@ -139,6 +141,16 @@ export interface DashboardData {
     maturityDate: string | null;
     principal: number;
     interestFreq: string | null;
+  }>;
+  savingsInterestReviews: Array<{
+    accountId: string;
+    accountName: string;
+    frequency: "MONTHLY" | "QUARTERLY";
+    rate: string;
+    periodStart: string;
+    periodEnd: string;
+    dueDate: string;
+    amount: string;
   }>;
 }
 

@@ -19,6 +19,8 @@ export async function createAccount(raw: z.infer<typeof accountCreateSchema>) {
       loanEndDate: input.loanEndDate ?? null,
       institution: input.institution ?? null,
       notes: input.notes ?? null,
+      savingsInterestRate: input.type === "SAVINGS" ? input.savingsInterestRate ?? null : null,
+      savingsInterestFrequency: input.type === "SAVINGS" ? input.savingsInterestFrequency ?? null : null,
       color: input.color ?? null,
       icon: input.icon ?? null,
     },
@@ -38,6 +40,8 @@ export async function updateAccount(id: string, raw: z.infer<typeof accountUpdat
       dueDay: input.dueDay ?? undefined,
       institution: input.institution ?? undefined,
       notes: input.notes ?? undefined,
+      savingsInterestRate: input.savingsInterestRate === undefined ? undefined : input.savingsInterestRate,
+      savingsInterestFrequency: input.savingsInterestFrequency === undefined ? undefined : input.savingsInterestFrequency,
       color: input.color ?? undefined,
       icon: input.icon ?? undefined,
       archived: input.archived ?? undefined,
@@ -45,9 +49,9 @@ export async function updateAccount(id: string, raw: z.infer<typeof accountUpdat
   });
 }
 
-export async function listAccountsWithBalance() {
+export async function listAccountsWithBalance(options: { includeArchived?: boolean } = {}) {
   const accounts = await prisma.account.findMany({
-    where: { archived: false },
+    where: options.includeArchived ? undefined : { archived: false },
     orderBy: [{ type: "asc" }, { createdAt: "asc" }],
   });
   const txns = await prisma.transaction.findMany({

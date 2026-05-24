@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
@@ -35,13 +36,15 @@ import { useDashboard, type DashboardData } from "@/hooks/use-data";
 import { useCurrency } from "@/components/currency-provider";
 import { formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { postJson } from "@/lib/fetcher";
 import { TransactionRow } from "@/components/transactions/transaction-row";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 export default function DashboardPage() {
   const [range, setRange] = React.useState<RangeValue>({ kind: "WEEK" });
   const query = buildRangeQuery(range);
-  const { data, isLoading } = useDashboard(query);
+  const { data, isLoading, mutate } = useDashboard(query);
   const { formatCurrency } = useCurrency();
 
   const incomeDelta = computeDelta(
@@ -97,6 +100,10 @@ export default function DashboardPage() {
 
           {data.maturedHoldings.length > 0 && (
             <MaturityReviewCard holdings={data.maturedHoldings} />
+          )}
+
+          {data.savingsInterestReviews.length > 0 && (
+            <SavingsInterestReviewCard reviews={data.savingsInterestReviews} onDone={() => mutate()} />
           )}
 
           <div className="grid gap-3 lg:grid-cols-3">
@@ -201,6 +208,77 @@ export default function DashboardPage() {
         </>
       )}
     </div>
+  );
+}
+
+function SavingsInterestReviewCard({
+  reviews,
+  onDone,
+}: {
+  reviews: DashboardData["savingsInterestReviews"];
+  onDone: () => void;
+}) {
+  const { formatCurrency } = useCurrency();
+  const primary = reviews[0];
+  const [amount, setAmount] = React.useState(primary.amount);
+  const [saving, setSaving] = React.useState(false);
+  const extraCount = reviews.length - 1;
+
+  React.useEffect(() => {
+    setAmount(primary.amount);
+  }, [primary.amount, primary.accountId, primary.periodStart]);
+
+  const approve = async () => {
+    try {
+      setSaving(true);
+      await postJson("/api/savings-interest/approve", {
+        accountId: primary.accountId,
+        periodStart: primary.periodStart,
+        periodEnd: primary.periodEnd,
+        amount,
+      });
+      toast.success("Savings interest recorded");
+      onDone();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to record interest");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="border-emerald-500/30 bg-emerald-500/5">
+      <CardContent className="flex flex-col gap-3 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex gap-3">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+            <PiggyBank className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-sm font-medium">
+              Review savings interest for {primary.accountName}{extraCount > 0 ? `, plus ${extraCount} more` : ""}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {format(new Date(primary.periodStart), "MMM d, yyyy")} - {format(new Date(primary.periodEnd), "MMM d, yyyy")}
+              {" "}at {primary.rate}% p.a. daily balance basis.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative sm:w-36">
+            <Input
+              className="h-9 tabular"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              aria-label="Savings interest amount"
+            />
+          </div>
+          <Button size="sm" onClick={approve} disabled={saving}>
+            {saving ? "Saving..." : `Approve ${formatCurrency(amount)}`}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { mutate } from "swr";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { accountUpdateSchema } from "@/lib/validators";
 import { patchJson } from "@/lib/fetcher";
 import type { AccountWithBalance } from "@/hooks/use-data";
@@ -36,6 +37,8 @@ export function AccountEditDialog({ open, onOpenChange, account }: Props) {
       dueDay: account?.dueDay ?? undefined,
       institution: account?.institution ?? "",
       notes: account?.notes ?? "",
+      savingsInterestRate: account?.savingsInterestRate ?? undefined,
+      savingsInterestFrequency: account?.savingsInterestFrequency ?? "QUARTERLY",
     },
   });
 
@@ -48,6 +51,8 @@ export function AccountEditDialog({ open, onOpenChange, account }: Props) {
         dueDay: account.dueDay ?? undefined,
         institution: account.institution ?? "",
         notes: account.notes ?? "",
+        savingsInterestRate: account.savingsInterestRate ?? undefined,
+        savingsInterestFrequency: account.savingsInterestFrequency ?? "QUARTERLY",
       });
     }
   }, [open, account, form]);
@@ -90,6 +95,29 @@ export function AccountEditDialog({ open, onOpenChange, account }: Props) {
                 <Label>Due day</Label>
                 <Input type="number" min={1} max={28} {...form.register("dueDay", { valueAsNumber: true })} />
               </div>
+            </div>
+          )}
+          {account?.type === "SAVINGS" && (
+            <div className="grid grid-cols-2 gap-3 rounded-md border p-3">
+              <div className="space-y-1.5">
+                <Label>Savings interest % p.a.</Label>
+                <Input inputMode="decimal" placeholder="2.50" {...form.register("savingsInterestRate")} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Interest credit</Label>
+                <Controller control={form.control} name="savingsInterestFrequency" render={({ field }) => (
+                  <Select value={field.value ?? "QUARTERLY"} onValueChange={field.onChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MONTHLY">Monthly</SelectItem>
+                      <SelectItem value="QUARTERLY">Quarterly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )} />
+              </div>
+              <p className="col-span-2 text-xs text-muted-foreground">
+                Interest appears as a dashboard review before Finarc records income.
+              </p>
             </div>
           )}
           <div className="space-y-1.5">

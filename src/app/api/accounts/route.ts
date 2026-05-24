@@ -5,9 +5,10 @@ import { serialize } from "@/lib/serialize";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const accounts = await listAccountsWithBalance();
+    const includeArchived = req.nextUrl.searchParams.get("includeArchived") === "1";
+    const accounts = await listAccountsWithBalance({ includeArchived });
     return ok(serialize(accounts));
   } catch (e) {
     return handleError(e);
