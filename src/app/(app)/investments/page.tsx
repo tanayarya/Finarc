@@ -287,10 +287,10 @@ export default function InvestmentsPage() {
             <TabsContent value="all">{viewMode === "grid" ? <HoldingsList holdings={holdings} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable holdings={holdings} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
             <TabsContent value="stocks">{viewMode === "grid" ? <HoldingsList holdings={stocks} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable holdings={stocks} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
             <TabsContent value="mf">{viewMode === "grid" ? <HoldingsList holdings={mfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable holdings={mfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
-            <TabsContent value="bonds">{viewMode === "grid" ? <HoldingsList holdings={bonds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable holdings={bonds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
-            <TabsContent value="fd">{viewMode === "grid" ? <HoldingsList holdings={fds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable holdings={fds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
-            <TabsContent value="rd">{viewMode === "grid" ? <HoldingsList holdings={rds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable holdings={rds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
-            <TabsContent value="pf">{viewMode === "grid" ? <HoldingsList holdings={pfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable holdings={pfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
+            <TabsContent value="bonds">{viewMode === "grid" ? <HoldingsList holdings={bonds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable mode="fixedIncome" holdings={bonds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
+            <TabsContent value="fd">{viewMode === "grid" ? <HoldingsList holdings={fds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable mode="fixedIncome" holdings={fds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
+            <TabsContent value="rd">{viewMode === "grid" ? <HoldingsList holdings={rds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable mode="fixedIncome" holdings={rds} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
+            <TabsContent value="pf">{viewMode === "grid" ? <HoldingsList holdings={pfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} /> : <HoldingsTable mode="fixedIncome" holdings={pfs} formatCurrency={formatCurrency} onSell={setSellHolding} onAdd={setAddHolding} onEdit={setEditHolding} onSip={setSipHolding} />}</TabsContent>
           </Tabs>
         </>
       )}
@@ -394,6 +394,7 @@ function HoldingsTable({
   onAdd,
   onEdit,
   onSip,
+  mode = "market",
 }: {
   holdings: HoldingItem[];
   formatCurrency: (v: number | string | null | undefined) => string;
@@ -401,7 +402,10 @@ function HoldingsTable({
   onAdd: (h: HoldingItem) => void;
   onEdit: (h: HoldingItem) => void;
   onSip: (h: HoldingItem) => void;
+  mode?: "market" | "fixedIncome";
 }) {
+  const isFixedIncomeTable = mode === "fixedIncome";
+
   return (
     <Card>
       <CardContent className="px-0 py-0">
@@ -410,9 +414,18 @@ function HoldingsTable({
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
-              <TableHead className="text-right">Units</TableHead>
-              <TableHead className="text-right">Avg Price</TableHead>
-              <TableHead className="text-right">Current</TableHead>
+              {isFixedIncomeTable ? (
+                <>
+                  <TableHead className="text-right">Rate</TableHead>
+                  <TableHead className="text-right">Maturity</TableHead>
+                </>
+              ) : (
+                <>
+                  <TableHead className="text-right">Units</TableHead>
+                  <TableHead className="text-right">Avg Price</TableHead>
+                  <TableHead className="text-right">Current</TableHead>
+                </>
+              )}
               <TableHead className="text-right">Invested</TableHead>
               <TableHead className="text-right">Value</TableHead>
               <TableHead className="text-right">P&L</TableHead>
@@ -435,15 +448,26 @@ function HoldingsTable({
                   <TableCell>
                     <Badge variant="muted" className="text-[10px]">{getAssetClassLabel(h.assetClass)}</Badge>
                   </TableCell>
-                  <TableCell className="text-right tabular">
-                    {isFdBondPf ? "—" : h.units.toFixed(h.type === "STOCK" ? 0 : 3)}
-                  </TableCell>
-                  <TableCell className="text-right tabular">
-                    {isFdBondPf ? "—" : formatCurrency(h.avgBuyPrice)}
-                  </TableCell>
-                  <TableCell className="text-right tabular">
-                    {isFdBondPf ? "—" : formatCurrency(h.currentPrice)}
-                  </TableCell>
+                  {isFixedIncomeTable ? (
+                    <>
+                      <TableCell className="text-right tabular">{h.interestRate ? `${h.interestRate}%` : "—"}</TableCell>
+                      <TableCell className="text-right tabular">
+                        {h.maturityDate ? new Date(h.maturityDate).toLocaleDateString() : "—"}
+                      </TableCell>
+                    </>
+                  ) : (
+                    <>
+                      <TableCell className="text-right tabular">
+                        {isFdBondPf ? "—" : h.units.toFixed(h.type === "STOCK" ? 0 : 3)}
+                      </TableCell>
+                      <TableCell className="text-right tabular">
+                        {isFdBondPf ? "—" : formatCurrency(h.avgBuyPrice)}
+                      </TableCell>
+                      <TableCell className="text-right tabular">
+                        {isFdBondPf ? "—" : formatCurrency(h.currentPrice)}
+                      </TableCell>
+                    </>
+                  )}
                   <TableCell className="text-right tabular">{formatCurrency(h.invested)}</TableCell>
                   <TableCell className="text-right tabular font-medium">{formatCurrency(h.currentValue)}</TableCell>
                   <TableCell className={cn("text-right tabular font-medium", positive ? "text-emerald-600" : "text-rose-600")}>
