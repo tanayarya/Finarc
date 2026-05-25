@@ -148,8 +148,8 @@ export function RecurringDialog({ open, onOpenChange, editRule }: Props) {
               <Input inputMode="decimal" placeholder="0.00" {...form.register("amount")} />
               {type === "CREDIT_PAYMENT" && creditDue !== null && (
                 <p className="text-[10px] text-muted-foreground">
-                  Current due: <strong>{Number(creditDue) > 0 ? `₹${creditDue}` : "₹0 (no outstanding)"}</strong>
-                  {Number(creditDue) > 0 && " — will auto-pay actual balance each month"}
+                  Current outstanding: <strong>{Number(creditDue) > 0 ? `₹${creditDue}` : "₹0"}</strong>
+                  {Number(creditDue) > 0 && " — recurring runs pay the statement balance for that cycle"}
                 </p>
               )}
             </div>

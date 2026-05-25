@@ -95,13 +95,13 @@ export async function materializeDueRecurring(now = new Date()): Promise<number>
         // For LOAN_PAYMENT: cap the recurring payment to outstanding principal.
         let paymentAmount = rule.amount;
         if (rule.type === "CREDIT_PAYMENT" && rule.toAccountId) {
-          const { computeAccountBalance } = await import("@/lib/finance/balances");
-          const creditBalance = await computeAccountBalance(rule.toAccountId);
-          // Only pay if there's an outstanding balance
-          if (creditBalance.greaterThan(0)) {
-            paymentAmount = creditBalance as any; // Decimal compatible
+          const { computeCreditStatementPaymentAmount } = await import("@/lib/finance/credit-cards");
+          const statementDue = await computeCreditStatementPaymentAmount(rule.toAccountId, cursor);
+          // Only pay the statement balance due for this card cycle.
+          if (statementDue.greaterThan(0)) {
+            paymentAmount = statementDue as any; // Decimal compatible
           } else {
-            // No balance due — skip this occurrence
+            // No statement balance due — skip this occurrence
             cursor = nextOccurrence(cursor, rule.frequency, rule.interval);
             safety += 1;
             continue;
