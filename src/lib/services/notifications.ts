@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { computeBudgetProgress } from "@/lib/finance/budgets";
 import { computeAccountBalance } from "@/lib/finance/balances";
+import { daysUntilCreditDue, nextCreditDueDate } from "@/lib/finance/credit-cards";
 import { addDays, format } from "date-fns";
 
 /**
@@ -55,22 +56,20 @@ export async function notifyCreditDue(): Promise<{ sent: boolean; message?: stri
   });
 
   const today = new Date();
-  const currentDay = today.getDate();
   const notifications: string[] = [];
 
   for (const account of creditAccounts) {
     if (!account.dueDay) continue;
-    const daysUntilDue = account.dueDay >= currentDay
-      ? account.dueDay - currentDay
-      : (30 - currentDay) + account.dueDay;
+    const daysUntilDue = daysUntilCreditDue(account.dueDay, today);
 
     if (daysUntilDue <= 5) {
       const balance = await computeAccountBalance(account.id);
       if (balance.lte(0)) continue;
+      const dueDate = nextCreditDueDate(account.dueDay, today);
       notifications.push(
         `Card: ${account.name}\n` +
         `Due Amount: ${balance.toFixed(2)}\n` +
-        `Due Date: Day ${account.dueDay}\n` +
+        `Due Date: ${format(dueDate, "MMM d, yyyy")}\n` +
         `Days Left: ${daysUntilDue}\n` +
         `Status: ${daysUntilDue === 0 ? "DUE TODAY" : daysUntilDue <= 2 ? "URGENT" : "UPCOMING"}`
       );

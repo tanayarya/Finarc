@@ -112,7 +112,11 @@ export interface DashboardData {
     id: string;
     name: string;
     type: "CREDIT" | "LOAN";
+    statementDay: number | null;
     dueDay: number | null;
+    dueDate: string | null;
+    daysUntilDue: number | null;
+    dueMonthRelation: "same_month" | "next_month" | null;
     creditLimit: string | null;
     balance: string;
   }>;

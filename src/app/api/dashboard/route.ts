@@ -18,6 +18,7 @@ import { pendingBondInterestReviews } from "@/lib/services/bond-interest";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { ZERO } from "@/lib/money";
+import { daysUntilCreditDue, dueMonthRelation, nextCreditDueDate } from "@/lib/finance/credit-cards";
 import { addDays, endOfDay } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -103,7 +104,11 @@ export async function GET(req: NextRequest) {
           id: a.id,
           name: a.name,
           type: a.type,
+          statementDay: a.statementDay,
           dueDay: a.dueDay,
+          dueDate: a.dueDay ? nextCreditDueDate(a.dueDay).toISOString() : null,
+          daysUntilDue: a.dueDay ? daysUntilCreditDue(a.dueDay) : null,
+          dueMonthRelation: dueMonthRelation(a.statementDay, a.dueDay),
           creditLimit: a.creditLimit?.toString() ?? null,
           balance: dueBalance.toFixed(2),
         };

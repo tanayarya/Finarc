@@ -546,10 +546,13 @@ function UpcomingPanel({
   creditObligations,
 }: {
   upcomingRecurring: Array<{ ruleId: string; name: string; amount: string; type: string; date: string }>;
-  creditObligations: Array<{ id: string; name: string; type: "CREDIT" | "LOAN"; dueDay: number | null }>;
+  creditObligations: Array<{ id: string; name: string; type: "CREDIT" | "LOAN"; dueDay: number | null; dueDate?: string | null; daysUntilDue?: number | null }>;
 }) {
   const { formatCurrency } = useCurrency();
-  const dueSoon = creditObligations.filter((c) => c.dueDay).slice(0, 3);
+  const dueSoon = creditObligations
+    .filter((c) => c.dueDay)
+    .sort((a, b) => (a.daysUntilDue ?? 999) - (b.daysUntilDue ?? 999))
+    .slice(0, 3);
   return (
     <Card>
       <CardHeader>
@@ -601,7 +604,9 @@ function UpcomingPanel({
                 {dueSoon.map((c) => (
                   <li key={c.id} className="flex items-center justify-between text-sm">
                     <span>{c.name}</span>
-                    <span className="text-xs text-muted-foreground">Day {c.dueDay}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {c.dueDate ? format(new Date(c.dueDate), "MMM d") : `Day ${c.dueDay}`}
+                    </span>
                   </li>
                 ))}
               </ul>
