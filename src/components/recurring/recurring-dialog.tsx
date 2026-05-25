@@ -19,7 +19,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { recurringCreateSchema } from "@/lib/validators";
-import { postJson, patchJson } from "@/lib/fetcher";
+import { fetcher, postJson, patchJson } from "@/lib/fetcher";
 import { useAccounts, useCategories } from "@/hooks/use-data";
 import type { z } from "zod";
 
@@ -65,18 +65,21 @@ export function RecurringDialog({ open, onOpenChange, editRule }: Props) {
 
   const onSubmit = form.handleSubmit(async (values) => {
     try {
+      const payload = values.type === "CREDIT_PAYMENT"
+        ? { ...values, amount: "0", categoryId: null }
+        : values;
       if (isEdit && editRule) {
         await patchJson(`/api/recurring/${editRule.id}`, {
-          name: values.name,
-          amount: values.amount,
-          frequency: values.frequency,
-          interval: values.interval,
-          endDate: values.endDate,
-          description: values.description,
+          name: payload.name,
+          amount: payload.amount,
+          frequency: payload.frequency,
+          interval: payload.interval,
+          endDate: payload.endDate,
+          description: payload.description,
         });
         toast.success("Rule updated");
       } else {
-        await postJson("/api/recurring", values);
+        await postJson("/api/recurring", payload);
         toast.success("Recurring rule created");
       }
       onOpenChange(false);
@@ -92,24 +95,19 @@ export function RecurringDialog({ open, onOpenChange, editRule }: Props) {
   const loanAccounts = (accounts ?? []).filter((a) => a.type === "LOAN");
   const cats = type === "INCOME" ? incomeCats : expenseCats;
 
-  // For credit card payment: fetch current due amount when card is selected
   const [creditDue, setCreditDue] = React.useState<string | null>(null);
   const selectedToAccount = form.watch("toAccountId");
+  const startDate = form.watch("startDate");
   React.useEffect(() => {
     if (type === "CREDIT_PAYMENT" && selectedToAccount) {
-      // Find the credit account balance from accounts list
-      const card = (accounts ?? []).find((a) => a.id === selectedToAccount);
-      if (card && card.type === "CREDIT") {
-        setCreditDue(card.balance);
-        // Auto-fill amount with current due
-        if (Number(card.balance) > 0) {
-          form.setValue("amount", card.balance);
-        }
-      }
+      form.setValue("amount", "0");
+      fetcher<{ amount: string }>(`/api/credit-cards/statement-due?accountId=${encodeURIComponent(selectedToAccount)}&date=${encodeURIComponent(new Date(startDate ?? new Date()).toISOString())}`)
+        .then((data) => setCreditDue(data.amount))
+        .catch(() => setCreditDue("0.00"));
     } else {
       setCreditDue(null);
     }
-  }, [type, selectedToAccount, accounts, form]);
+  }, [type, selectedToAccount, startDate, form]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -142,17 +140,25 @@ export function RecurringDialog({ open, onOpenChange, editRule }: Props) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          {!isEdit && type === "CREDIT_PAYMENT" && (
             <div className="space-y-1.5">
-              <Label>{type === "CREDIT_PAYMENT" ? "Amount (auto-fetched)" : "Amount"}</Label>
-              <Input inputMode="decimal" placeholder="0.00" {...form.register("amount")} />
-              {type === "CREDIT_PAYMENT" && creditDue !== null && (
-                <p className="text-[10px] text-muted-foreground">
-                  Current outstanding: <strong>{Number(creditDue) > 0 ? `₹${creditDue}` : "₹0"}</strong>
-                  {Number(creditDue) > 0 && " — recurring runs pay the statement balance for that cycle"}
-                </p>
-              )}
+              <Label>Credit card account</Label>
+              <Controller control={form.control} name="toAccountId" render={({ field }) => (
+                <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
+                  <SelectTrigger><SelectValue placeholder="Select card" /></SelectTrigger>
+                  <SelectContent>{creditAccounts.map((a) => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
+                </Select>
+              )} />
             </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            {type !== "CREDIT_PAYMENT" ? (
+              <div className="space-y-1.5">
+                <Label>Amount</Label>
+                <Input inputMode="decimal" placeholder="0.00" {...form.register("amount")} />
+              </div>
+            ) : null}
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1.5">
                 <Label>Frequency</Label>
@@ -205,19 +211,19 @@ export function RecurringDialog({ open, onOpenChange, editRule }: Props) {
             </div>
           )}
 
-          {!isEdit && (type === "TRANSFER" || type === "CREDIT_PAYMENT" || type === "LOAN_PAYMENT") && (
+          {!isEdit && (type === "TRANSFER" || type === "LOAN_PAYMENT") && (
             <div className="space-y-1.5">
-              <Label>{type === "CREDIT_PAYMENT" ? "Credit card account" : type === "LOAN_PAYMENT" ? "Loan account" : "To account"}</Label>
+              <Label>{type === "LOAN_PAYMENT" ? "Loan account" : "To account"}</Label>
               <Controller control={form.control} name="toAccountId" render={({ field }) => (
                 <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
                   <SelectTrigger><SelectValue placeholder="Destination" /></SelectTrigger>
-                  <SelectContent>{(type === "CREDIT_PAYMENT" ? creditAccounts : type === "LOAN_PAYMENT" ? loanAccounts : allAccounts).map((a) => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
+                  <SelectContent>{(type === "LOAN_PAYMENT" ? loanAccounts : allAccounts).map((a) => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
                 </Select>
               )} />
             </div>
           )}
 
-          {!isEdit && type !== "TRANSFER" && (
+          {!isEdit && type !== "TRANSFER" && type !== "CREDIT_PAYMENT" && type !== "LOAN_PAYMENT" && (
             <div className="space-y-1.5">
               <Label>Category (optional)</Label>
               <Controller control={form.control} name="categoryId" render={({ field }) => (
@@ -226,6 +232,16 @@ export function RecurringDialog({ open, onOpenChange, editRule }: Props) {
                   <SelectContent>{(cats ?? []).map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}</SelectContent>
                 </Select>
               )} />
+            </div>
+          )}
+
+          {!isEdit && type === "CREDIT_PAYMENT" && (
+            <div className="rounded-md border bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Statement due on selected run date</p>
+              <p className="tabular text-lg font-semibold">₹{creditDue ?? "0.00"}</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                This is a preview. When the rule runs, Finarc recalculates the actual statement balance and pays that amount.
+              </p>
             </div>
           )}
 

@@ -195,7 +195,7 @@ export const recurringCreateSchema = z
   .object({
     name: z.string().trim().min(1).max(80),
     type: z.enum(["INCOME", "EXPENSE", "TRANSFER", "CREDIT_PAYMENT", "LOAN_PAYMENT"]),
-    amount: positiveDecimal,
+    amount: positiveDecimal.optional(),
     frequency: z.enum(["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]),
     interval: z.number().int().min(1).max(365).default(1),
     startDate: z.coerce.date(),
@@ -207,6 +207,13 @@ export const recurringCreateSchema = z
     holdingId: z.string().optional().nullable(),
   })
   .superRefine((data, ctx) => {
+    if (data.type !== "CREDIT_PAYMENT" && !data.amount) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["amount"],
+        message: "Amount required",
+      });
+    }
     if (data.type === "TRANSFER" || data.type === "CREDIT_PAYMENT" || data.type === "LOAN_PAYMENT") {
       if (!data.accountId || !data.toAccountId) {
         ctx.addIssue({

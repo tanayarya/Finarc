@@ -13,7 +13,7 @@ export async function createRecurringRule(raw: z.infer<typeof recurringCreateSch
     data: {
       name: input.name,
       type: input.type,
-      amount: input.amount,
+      amount: input.amount ?? "0",
       frequency: input.frequency,
       interval: input.interval,
       startDate: input.startDate,
