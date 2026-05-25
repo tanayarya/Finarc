@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { budgetCreateSchema } from "@/lib/validators";
 import { postJson } from "@/lib/fetcher";
-import { useCategories } from "@/hooks/use-data";
+import { useBudgets, useCategories } from "@/hooks/use-data";
 import type { z } from "zod";
 
 type FormValues = z.input<typeof budgetCreateSchema>;
@@ -35,17 +35,25 @@ type FormValues = z.input<typeof budgetCreateSchema>;
 export function BudgetDialog({ trigger }: { trigger: React.ReactNode }) {
   const [open, setOpen] = React.useState(false);
   const { data: cats } = useCategories("EXPENSE");
+  const { data: budgets } = useBudgets();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(budgetCreateSchema),
     defaultValues: {
-      name: "",
       categoryId: "",
       amount: "",
       period: "MONTHLY",
       startDate: new Date(),
     },
   });
+  const selectedPeriod = form.watch("period");
+  const budgetedCategoryIds = React.useMemo(() => {
+    return new Set(
+      (budgets ?? [])
+        .filter((budget) => budget.period === selectedPeriod)
+        .map((budget) => budget.category.id)
+    );
+  }, [budgets, selectedPeriod]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     try {
@@ -53,7 +61,6 @@ export function BudgetDialog({ trigger }: { trigger: React.ReactNode }) {
       toast.success("Budget created");
       setOpen(false);
       form.reset({
-        name: "",
         categoryId: "",
         amount: "",
         period: "MONTHLY",
@@ -78,14 +85,10 @@ export function BudgetDialog({ trigger }: { trigger: React.ReactNode }) {
         <DialogHeader>
           <DialogTitle>New budget</DialogTitle>
           <DialogDescription>
-            Set a spending limit for an expense category.
+            Set one spending limit per expense category and period.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="b-name">Name</Label>
-            <Input id="b-name" placeholder="Monthly groceries" {...form.register("name")} />
-          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Category</Label>
@@ -99,8 +102,8 @@ export function BudgetDialog({ trigger }: { trigger: React.ReactNode }) {
                     </SelectTrigger>
                     <SelectContent>
                       {(cats ?? []).map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
+                        <SelectItem key={c.id} value={c.id} disabled={budgetedCategoryIds.has(c.id)}>
+                          {c.name}{budgetedCategoryIds.has(c.id) ? " · already budgeted" : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>

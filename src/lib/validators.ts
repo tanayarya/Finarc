@@ -163,7 +163,7 @@ export const transactionUpdateSchema = z.object({
 });
 
 export const budgetCreateSchema = z.object({
-  name: z.string().trim().min(1).max(80),
+  name: z.string().trim().max(80).optional(),
   categoryId: z.string().min(1),
   amount: positiveDecimal,
   period: z.enum(["WEEKLY", "MONTHLY", "YEARLY"]),

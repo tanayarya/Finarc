@@ -109,7 +109,7 @@ export default function ReportsPage() {
                       {data.budgets.map((b) => (
                         <li key={b.id} className="space-y-1.5">
                           <div className="flex items-center justify-between text-sm">
-                            <div><p className="font-medium">{b.name}</p><p className="text-xs text-muted-foreground">{b.category} · {b.period.toLowerCase()}</p></div>
+                            <div><p className="font-medium">{b.category}</p><p className="text-xs text-muted-foreground">{b.period.toLowerCase()}</p></div>
                             <span className="tabular text-muted-foreground">{formatCurrency(b.spent)} / {formatCurrency(b.allocated)}</span>
                           </div>
                           <Progress value={Math.min(100, b.usage * 100)} indicatorClassName={cn(b.status === "HEALTHY" && "bg-emerald-500", b.status === "NEAR_LIMIT" && "bg-amber-500", b.status === "OVER_BUDGET" && "bg-rose-500")} />

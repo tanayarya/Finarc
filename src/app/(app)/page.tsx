@@ -394,6 +394,7 @@ function BudgetUsageCard({
   data: Array<{
     id: string;
     name: string;
+    category?: { name: string };
     usage: number;
     spent: string;
     allocated: string;
@@ -427,7 +428,7 @@ function BudgetUsageCard({
           data.slice(0, 4).map((b) => (
             <div key={b.id} className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-medium">{b.name}</span>
+                <span className="font-medium">{b.category?.name ?? b.name}</span>
                 <span className="tabular text-muted-foreground">
                   {formatCurrency(b.spent)} / {formatCurrency(b.allocated)}
                 </span>

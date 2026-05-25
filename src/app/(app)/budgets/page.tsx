@@ -97,9 +97,9 @@ export default function BudgetsPage() {
                     <div>
                       <CardDescription className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-sm" style={{ background: b.category.color ?? "hsl(var(--muted))" }} />
-                        {b.category.name} · {b.period.toLowerCase()}
+                        {b.period.toLowerCase()}
                       </CardDescription>
-                      <CardTitle className="mt-1 text-base">{b.name}</CardTitle>
+                      <CardTitle className="mt-1 text-base">{b.category.name}</CardTitle>
                     </div>
                     <div className="flex items-center gap-1">
                       <StatusBadge status={b.status} />

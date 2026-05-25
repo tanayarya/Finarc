@@ -29,12 +29,12 @@ interface Props {
 export function BudgetEditDialog({ open, onOpenChange, budget }: Props) {
   const form = useForm<FormValues>({
     resolver: zodResolver(budgetUpdateSchema),
-    defaultValues: { name: budget?.name ?? "", amount: budget?.allocated ?? "", period: budget?.period ?? "MONTHLY" },
+    defaultValues: { amount: budget?.allocated ?? "", period: budget?.period ?? "MONTHLY" },
   });
 
   React.useEffect(() => {
     if (open && budget) {
-      form.reset({ name: budget.name, amount: budget.allocated, period: budget.period });
+      form.reset({ amount: budget.allocated, period: budget.period });
     }
   }, [open, budget, form]);
 
@@ -55,13 +55,9 @@ export function BudgetEditDialog({ open, onOpenChange, budget }: Props) {
       <DialogContent className="sm:max-w-[420px]">
         <DialogHeader>
           <DialogTitle>Edit budget</DialogTitle>
-          <DialogDescription>Update the name, amount, or period.</DialogDescription>
+          <DialogDescription>Update the amount or period for {budget?.category.name}.</DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Name</Label>
-            <Input {...form.register("name")} />
-          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Amount</Label>
