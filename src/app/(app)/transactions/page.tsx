@@ -143,7 +143,7 @@ export default function TransactionsPage() {
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search descriptions"
+                placeholder="Search description or amount"
                 className="h-9 w-full pl-8 sm:w-[220px]"
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(0); }}

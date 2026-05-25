@@ -3,6 +3,7 @@ import { ok, handleError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { createTransaction } from "@/lib/services/transactions";
 import { serialize } from "@/lib/serialize";
+import { TransactionType, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +19,10 @@ export async function GET(req: NextRequest) {
     const take = Math.min(parseInt(params.get("take") ?? "100", 10), 500);
     const skip = parseInt(params.get("skip") ?? "0", 10);
 
-    const where: Record<string, unknown> = {};
-    if (type) where.type = type;
+    const where: Prisma.TransactionWhereInput = {};
+    if (type && Object.values(TransactionType).includes(type as TransactionType)) {
+      where.type = type as TransactionType;
+    }
     if (accountId)
       where.OR = [
         { accountId },
@@ -34,8 +37,19 @@ export async function GET(req: NextRequest) {
       };
     if (search) {
       const term = search.trim();
-      if (term)
-        where.description = { contains: term, mode: "insensitive" as const };
+      if (term) {
+        const or: Prisma.TransactionWhereInput[] = [
+          { description: { contains: term, mode: "insensitive" } },
+        ];
+        const normalizedAmount = term.replace(/[₹,\s]/g, "");
+        if (/^-?\d+(\.\d{1,2})?$/.test(normalizedAmount)) {
+          or.push({ amount: normalizedAmount });
+        }
+        where.AND = [
+          ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+          { OR: or },
+        ];
+      }
     }
 
     const [items, total] = await Promise.all([

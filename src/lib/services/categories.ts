@@ -11,6 +11,22 @@ export async function listCategories(kind?: "INCOME" | "EXPENSE") {
 
 export async function createCategory(raw: z.infer<typeof categoryCreateSchema>) {
   const input = categoryCreateSchema.parse(raw);
+  const existing = await prisma.category.findUnique({
+    where: { name_kind: { name: input.name, kind: input.kind } },
+  });
+  if (existing) {
+    if (existing.archived) {
+      return prisma.category.update({
+        where: { id: existing.id },
+        data: {
+          archived: false,
+          color: input.color ?? existing.color,
+          icon: input.icon ?? existing.icon,
+        },
+      });
+    }
+    throw new Error(`${input.name} already exists as a ${input.kind.toLowerCase()} category`);
+  }
   return prisma.category.create({
     data: {
       name: input.name,

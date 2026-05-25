@@ -66,7 +66,7 @@ export function RecurringDialog({ open, onOpenChange, editRule }: Props) {
   const onSubmit = form.handleSubmit(async (values) => {
     try {
       const payload = values.type === "CREDIT_PAYMENT"
-        ? { ...values, amount: "0", categoryId: null }
+        ? { ...values, amount: "0", frequency: "MONTHLY" as const, interval: 1, categoryId: null }
         : values;
       if (isEdit && editRule) {
         await patchJson(`/api/recurring/${editRule.id}`, {
@@ -152,13 +152,12 @@ export function RecurringDialog({ open, onOpenChange, editRule }: Props) {
             </div>
           )}
 
+          {type !== "CREDIT_PAYMENT" ? (
           <div className="grid grid-cols-2 gap-3">
-            {type !== "CREDIT_PAYMENT" ? (
-              <div className="space-y-1.5">
-                <Label>Amount</Label>
-                <Input inputMode="decimal" placeholder="0.00" {...form.register("amount")} />
-              </div>
-            ) : null}
+            <div className="space-y-1.5">
+              <Label>Amount</Label>
+              <Input inputMode="decimal" placeholder="0.00" {...form.register("amount")} />
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1.5">
                 <Label>Frequency</Label>
@@ -180,6 +179,7 @@ export function RecurringDialog({ open, onOpenChange, editRule }: Props) {
               </div>
             </div>
           </div>
+          ) : null}
 
           {!isEdit && (
             <div className="grid grid-cols-2 gap-3">
@@ -200,7 +200,7 @@ export function RecurringDialog({ open, onOpenChange, editRule }: Props) {
                 )} />
               </div>
               <div className="space-y-1.5">
-                <Label>Account</Label>
+                <Label>{type === "CREDIT_PAYMENT" ? "Debit account" : "Account"}</Label>
                 <Controller control={form.control} name="accountId" render={({ field }) => (
                   <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>

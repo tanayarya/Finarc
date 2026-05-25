@@ -5,6 +5,7 @@ import type { Holding } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 const MARKER_PREFIX = "BOND_INTEREST";
+const REVIEWED_PREFIX = "reviewed:";
 
 export interface BondInterestReview {
   holdingId: string;
@@ -31,6 +32,10 @@ export function bondInterestMarker(holdingId: string, periodStart: Date, periodE
   ].join(":");
 }
 
+function reviewedBondInterestTag(marker: string) {
+  return `${REVIEWED_PREFIX}${marker}`;
+}
+
 export async function pendingBondInterestReviews(today = new Date()): Promise<BondInterestReview[]> {
   const holdings = await prisma.holding.findMany({
     where: {
@@ -53,7 +58,7 @@ export async function pendingBondInterestReviews(today = new Date()): Promise<Bo
       await prisma.holding.update({ where: { id: holding.id }, data: { sipRuleId: null } }).catch(() => {});
     }
     const periods = bondInterestPeriods(holding, today);
-    const period = await firstUnpostedBondPeriod(holding.id, periods);
+    const period = await firstUnpostedBondPeriod(holding, periods);
     if (!period) continue;
     const principal = holding.principalAmount
       ? new Decimal(holding.principalAmount.toString())
@@ -96,7 +101,10 @@ export async function approveBondInterest(input: {
 
   const marker = bondInterestMarker(holding.id, input.periodStart, input.periodEnd);
   const existing = await prisma.transaction.findFirst({ where: { notes: { startsWith: marker } } });
-  if (existing) return existing;
+  if (existing) {
+    await markBondInterestReviewed(holding.id, marker);
+    return existing;
+  }
 
   const reviews = await pendingBondInterestReviews(endOfDay(input.periodEnd));
   const review = reviews.find((r) => r.holdingId === holding.id && bondInterestMarker(r.holdingId, r.periodStart, r.periodEnd) === marker);
@@ -136,23 +144,36 @@ export async function approveBondInterest(input: {
       notes: `TDS ${tdsAmount.toFixed(2)}`,
     },
   });
+  await markBondInterestReviewed(holding.id, marker);
 
   return txn;
 }
 
 async function firstUnpostedBondPeriod(
-  holdingId: string,
+  holding: Pick<Holding, "id" | "tags">,
   periods: Array<{ periodStart: Date; periodEnd: Date; dueDate: Date }>
 ) {
   for (const period of periods) {
-    const marker = bondInterestMarker(holdingId, period.periodStart, period.periodEnd);
+    const marker = bondInterestMarker(holding.id, period.periodStart, period.periodEnd);
+    if (holding.tags.includes(reviewedBondInterestTag(marker))) continue;
     const existing = await prisma.transaction.findFirst({
       where: { notes: { startsWith: marker } },
       select: { id: true },
     });
     if (!existing) return period;
+    await markBondInterestReviewed(holding.id, marker);
   }
   return null;
+}
+
+async function markBondInterestReviewed(holdingId: string, marker: string) {
+  const tag = reviewedBondInterestTag(marker);
+  const holding = await prisma.holding.findUnique({ where: { id: holdingId }, select: { tags: true } });
+  if (!holding || holding.tags.includes(tag)) return;
+  await prisma.holding.update({
+    where: { id: holdingId },
+    data: { tags: [...holding.tags, tag] },
+  });
 }
 
 function bondInterestPeriods(
