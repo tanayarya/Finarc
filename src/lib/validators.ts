@@ -3,10 +3,17 @@ import { z } from "zod";
 const decimalString = z
   .union([z.string(), z.number()])
   .transform((v) => v.toString())
-  .refine((v) => /^-?\d+(\.\d{1,2})?$/.test(v), {
+  .refine((v) => /^\d+(\.\d{1,2})?$/.test(v), {
     message: "Enter a valid amount with up to 2 decimal places",
   })
   .refine((v) => Number(v) > 0 || v === "0", { message: "Amount must be positive" });
+
+const signedDecimalString = z
+  .union([z.string(), z.number()])
+  .transform((v) => v.toString())
+  .refine((v) => /^-?\d+(\.\d{1,2})?$/.test(v), {
+    message: "Enter a valid amount with up to 2 decimal places",
+  });
 
 const positiveDecimal = z
   .union([z.string(), z.number()])
@@ -42,7 +49,7 @@ export const accountCreateSchema = z
     name: z.string().trim().min(1, "Name required").max(80),
     type: accountTypeSchema,
     currency: z.string().trim().min(3).max(3).default("USD"),
-    openingBalance: decimalString.default("0"),
+    openingBalance: signedDecimalString.default("0"),
     creditLimit: positiveDecimal.optional(),
     statementDay: z.number().int().min(1).max(28).optional(),
     dueDay: z.number().int().min(1).max(28).optional(),
@@ -62,6 +69,13 @@ export const accountCreateSchema = z
         code: z.ZodIssueCode.custom,
         path: ["creditLimit"],
         message: "Credit limit required for credit accounts",
+      });
+    }
+    if (data.type !== "CREDIT" && Number(data.openingBalance) < 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["openingBalance"],
+        message: "Opening balance can be negative only for credit cards",
       });
     }
     if (data.type === "LOAN" && !data.loanPrincipal) {

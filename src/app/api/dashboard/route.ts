@@ -17,6 +17,7 @@ import { pendingSavingsInterestReviews } from "@/lib/services/savings-interest";
 import { pendingBondInterestReviews } from "@/lib/services/bond-interest";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
+import { ZERO } from "@/lib/money";
 import { addDays, endOfDay } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -96,14 +97,15 @@ export async function GET(req: NextRequest) {
     });
     const creditObligations = creditAccounts
       .map((a) => {
-        const bal = netWorth.byAccount.find((b) => b.accountId === a.id)?.balance.toFixed(2) ?? "0.00";
+        const rawBalance = netWorth.byAccount.find((b) => b.accountId === a.id)?.balance ?? ZERO;
+        const dueBalance = rawBalance.isNegative() ? ZERO : rawBalance;
         return {
           id: a.id,
           name: a.name,
           type: a.type,
           dueDay: a.dueDay,
           creditLimit: a.creditLimit?.toString() ?? null,
-          balance: bal,
+          balance: dueBalance.toFixed(2),
         };
       })
       .sort((a, b) => Number(b.balance) - Number(a.balance));

@@ -120,8 +120,11 @@ export function AccountDialog({ trigger }: Props) {
             <Label htmlFor="openingBalance">Opening balance</Label>
             <Input id="openingBalance" inputMode="decimal" placeholder="0.00" {...form.register("openingBalance")} />
             <p className="text-xs text-muted-foreground">
-              {type === "LOAN" ? "Enter outstanding loan principal." : type === "CREDIT" ? "Current outstanding balance owed." : "Current balance at the time of adding this account."}
+              {type === "LOAN" ? "Enter outstanding loan principal." : type === "CREDIT" ? "Enter amount owed. Use a negative amount for prepaid/extra credit balance." : "Current balance at the time of adding this account."}
             </p>
+            {form.formState.errors.openingBalance ? (
+              <p className="text-xs text-destructive">{form.formState.errors.openingBalance.message as string}</p>
+            ) : null}
           </div>
 
           {type === "CREDIT" ? (

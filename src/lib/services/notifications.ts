@@ -66,6 +66,7 @@ export async function notifyCreditDue(): Promise<{ sent: boolean; message?: stri
 
     if (daysUntilDue <= 5) {
       const balance = await computeAccountBalance(account.id);
+      if (balance.lte(0)) continue;
       notifications.push(
         `Card: ${account.name}\n` +
         `Due Amount: ${balance.toFixed(2)}\n` +
