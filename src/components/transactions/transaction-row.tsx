@@ -76,16 +76,16 @@ export function TransactionRow({ tx }: { tx: TxRow }) {
 
 function labelFor(tx: TxRow | TxRow["type"]) {
   if (typeof tx !== "string" && tx.trade) {
-    if (tx.trade.action === "SELL" || tx.trade.action === "MATURITY") return "Investment redemption";
-    if (tx.trade.action === "DIVIDEND" || tx.trade.action === "INTEREST") return "Investment income";
-    return "Investment buy";
+    if (tx.trade.action === "SELL" || tx.trade.action === "MATURITY") return "Redeem";
+    if (tx.trade.action === "DIVIDEND" || tx.trade.action === "INTEREST") return "Inv income";
+    return "Invest";
   }
   const t = typeof tx === "string" ? tx : tx.type;
   return {
     INCOME: "Income",
     EXPENSE: "Expense",
     TRANSFER: "Transfer",
-    CREDIT_PAYMENT: "Credit payment",
-    LOAN_PAYMENT: "Loan payment",
+    CREDIT_PAYMENT: "Card pay",
+    LOAN_PAYMENT: "Loan EMI",
   }[t];
 }

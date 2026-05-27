@@ -9,13 +9,13 @@ import { addDays, format } from "date-fns";
  * Uses a "lastNotified" key per type to ensure max once per day.
  */
 
-async function getTelegramConfig() {
+export async function getTelegramConfig() {
   const botToken = (await prisma.appSetting.findUnique({ where: { key: "telegramBotToken" } }))?.value;
   const chatId = (await prisma.appSetting.findUnique({ where: { key: "telegramChatId" } }))?.value;
   return { botToken, chatId, configured: Boolean(botToken && chatId) };
 }
 
-async function sendTelegram(botToken: string, chatId: string, message: string) {
+export async function sendTelegram(botToken: string, chatId: string, message: string) {
   const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -253,12 +253,14 @@ export async function notifyLowBalance(): Promise<{ sent: boolean; message?: str
 // ─── Run All ───────────────────────────────────────────────────────────
 
 export async function runAllNotifications() {
+  const { runMarketAlerts } = await import("@/lib/services/market-alerts");
   const results = {
     creditDue: await notifyCreditDue().catch((e) => ({ sent: false, message: (e as Error).message })),
     budgetExceeded: await notifyBudgetExceeded().catch((e) => ({ sent: false, message: (e as Error).message })),
     recurringDue: await notifyRecurringDue().catch((e) => ({ sent: false, message: (e as Error).message })),
     duesDue: await notifyDuesDue().catch((e) => ({ sent: false, message: (e as Error).message })),
     lowBalance: await notifyLowBalance().catch((e) => ({ sent: false, message: (e as Error).message })),
+    marketAlerts: await runMarketAlerts({ send: true }).catch((e) => ({ sent: false, message: (e as Error).message })),
   };
   return results;
 }

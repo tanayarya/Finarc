@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useTheme } from "next-themes";
-import { Download, Upload, Moon, Sun, Monitor, Database, Globe, Trash2, Send } from "lucide-react";
+import { Download, Upload, Moon, Sun, Monitor, Database, Globe, Trash2, Send, ArrowUpRight, Newspaper } from "lucide-react";
 import { toast } from "sonner";
 import useSWR, { mutate } from "swr";
 
@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useCurrency } from "@/components/currency-provider";
 import { useConfirm } from "@/components/confirm-provider";
 import { CURRENCIES } from "@/lib/currencies";
@@ -591,6 +592,195 @@ function TelegramSettings() {
           </div>
         </CardContent>
       </Card>
+
+      <MarketAlertSettings />
+    </div>
+  );
+}
+
+function MarketAlertSettings() {
+  const { data: config, mutate: mutateConfig } = useSWR<{
+    enabled: boolean;
+    time: string;
+    symbols: string[];
+    hasMarketauxKey: boolean;
+    hasNewsdataKey: boolean;
+    stocks: Array<{ symbol: string; name: string; quantity: number }>;
+    sources: Array<{ name: string; kind: "free-rss" | "optional-api"; url: string }>;
+  }>("/api/market-alerts/config");
+  const [enabled, setEnabled] = React.useState(false);
+  const [time, setTime] = React.useState("08:45");
+  const [symbols, setSymbols] = React.useState<string[]>([]);
+  const [marketauxKey, setMarketauxKey] = React.useState("");
+  const [newsdataKey, setNewsdataKey] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [scanning, setScanning] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!config) return;
+    setEnabled(config.enabled);
+    setTime(config.time);
+    setSymbols(config.symbols);
+  }, [config]);
+
+  const toggleSymbol = (symbol: string, checked: boolean) => {
+    setSymbols((cur) => checked ? Array.from(new Set([...cur, symbol])) : cur.filter((s) => s !== symbol));
+  };
+
+  const onSave = async () => {
+    setSaving(true);
+    try {
+      const payload: Record<string, unknown> = { enabled, time, symbols };
+      if (marketauxKey.trim()) payload.marketauxApiKey = marketauxKey.trim();
+      if (newsdataKey.trim()) payload.newsdataApiKey = newsdataKey.trim();
+      const res = await fetch("/api/market-alerts/config", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (!res.ok) throw new Error("Failed to save market alerts");
+      toast.success("Market alerts saved");
+      setMarketauxKey("");
+      setNewsdataKey("");
+      mutateConfig();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onScan = async () => {
+    setScanning(true);
+    try {
+      const res = await fetch("/api/market-alerts/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: true, send: false }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error?.message ?? "Scan failed");
+      const count = json?.data?.alerts?.length ?? 0;
+      toast.success(count ? `Found ${count} material alert${count === 1 ? "" : "s"}` : "No material alerts found");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Scan failed");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const allSelected = Boolean(config?.stocks.length) && config!.stocks.every((s) => symbols.includes(s.symbol));
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-sm"><Newspaper className="h-4 w-4" /> Market Stock Alerts</CardTitle>
+        <CardDescription>Telegram alerts only when selected stock holdings have material news worth reviewing.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between rounded-md border px-3 py-3">
+          <div>
+            <p className="text-sm font-medium">Enable market stock alerts</p>
+            <p className="text-xs text-muted-foreground">Uses your AI provider to filter noisy headlines before Telegram is notified.</p>
+          </div>
+          <Switch checked={enabled} onCheckedChange={setEnabled} />
+        </div>
+
+        {enabled ? (
+          <>
+          <div className="space-y-1">
+            <Label className="text-xs">Trigger time</Label>
+            <TimeSelect value={time} onChange={setTime} />
+            <p className="text-[10px] text-muted-foreground">Daily scan time in India time. No Telegram message is sent unless a material alert is found.</p>
+          </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs">Marketaux API key</Label>
+              <Button type="button" variant="ghost" size="sm" className="h-6 gap-1 px-2 text-[10px]" onClick={() => window.open("https://www.marketaux.com/", "_blank")}>
+                Get key <ArrowUpRight className="h-3 w-3" />
+              </Button>
+            </div>
+            <Input type="password" placeholder={config?.hasMarketauxKey ? "••••••(configured)" : "Optional, recommended"} value={marketauxKey} onChange={(e) => setMarketauxKey(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs">NewsData.io API key</Label>
+              <Button type="button" variant="ghost" size="sm" className="h-6 gap-1 px-2 text-[10px]" onClick={() => window.open("https://newsdata.io/", "_blank")}>
+                Get key <ArrowUpRight className="h-3 w-3" />
+              </Button>
+            </div>
+            <Input type="password" placeholder={config?.hasNewsdataKey ? "••••••(configured)" : "Optional backup"} value={newsdataKey} onChange={(e) => setNewsdataKey(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="rounded-md border">
+          <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
+            <div>
+              <p className="text-sm font-medium">Tracked stocks</p>
+              <p className="text-xs text-muted-foreground">Only direct stock holdings are shown. ETFs and mutual funds are excluded.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setSymbols(allSelected ? [] : (config?.stocks ?? []).map((s) => s.symbol))}>
+              {allSelected ? "Clear" : "Select all"}
+            </Button>
+          </div>
+          <div className="max-h-52 space-y-2 overflow-y-auto p-3">
+            {!config?.stocks.length ? (
+              <p className="text-sm text-muted-foreground">No direct stock holdings found.</p>
+            ) : (
+              config.stocks.map((stock) => (
+                <label key={stock.symbol} className="flex cursor-pointer items-start gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50">
+                  <Checkbox checked={symbols.includes(stock.symbol)} onCheckedChange={(v) => toggleSymbol(stock.symbol, Boolean(v))} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{stock.name}</span>
+                    <span className="text-xs text-muted-foreground">{stock.symbol} · {stock.quantity.toLocaleString("en-IN")} units</span>
+                  </span>
+                </label>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-md border bg-muted/20 p-3">
+          <p className="text-xs font-medium">Sources used</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Optional APIs: Marketaux and NewsData.io. Free/public sources: Moneycontrol RSS, Livemint Markets RSS, Business Standard Markets RSS, and SEBI RSS. AI filtering decides whether anything is important enough to notify.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={onScan} disabled={scanning || symbols.length === 0}>{scanning ? "Scanning..." : "Preview scan"}</Button>
+        </div>
+          </>
+        ) : (
+          <div className="rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            Turn this on to choose scan time, sources, and which stock holdings should be monitored.
+          </div>
+        )}
+        <Button onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save stock alerts"}</Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TimeSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [hour = "08", minute = "45"] = value.split(":");
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+  const minutes = Array.from(new Set(["00", "15", "30", "45", minute])).sort();
+  const setPart = (nextHour: string, nextMinute: string) => onChange(`${nextHour}:${nextMinute}`);
+
+  return (
+    <div className="flex max-w-xs items-center gap-2">
+      <Select value={hour} onValueChange={(next) => setPart(next, minute)}>
+        <SelectTrigger className="h-9 w-24"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {hours.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      <span className="text-sm text-muted-foreground">:</span>
+      <Select value={minute} onValueChange={(next) => setPart(hour, next)}>
+        <SelectTrigger className="h-9 w-24"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {minutes.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

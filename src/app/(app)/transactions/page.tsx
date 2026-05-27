@@ -47,6 +47,14 @@ const TYPE_LABELS = {
   LOAN_PAYMENT: "Loan payment",
 } as const;
 
+const TYPE_CHIP_LABELS = {
+  INCOME: "Income",
+  EXPENSE: "Expense",
+  TRANSFER: "Transfer",
+  CREDIT_PAYMENT: "Card pay",
+  LOAN_PAYMENT: "Loan EMI",
+} as const;
+
 export default function TransactionsPage() {
   const { data: accounts } = useAccounts();
   const confirm = useConfirm();
@@ -205,11 +213,11 @@ export default function TransactionsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
-                  <TableHead>Type</TableHead>
+                  <TableHead className="w-[112px]">Type</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Account</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="w-[170px] text-right">Amount</TableHead>
                   {data.runningBalances && <TableHead className="text-right">Balance</TableHead>}
                   <TableHead className="w-20" />
                 </TableRow>
@@ -225,19 +233,19 @@ export default function TransactionsPage() {
                   })();
                   const label = isInvestmentFlow
                     ? t.trade?.action === "SELL" || t.trade?.action === "MATURITY"
-                      ? "Investment redemption"
+                      ? "Redeem"
                       : t.trade?.action === "DIVIDEND" || t.trade?.action === "INTEREST"
-                        ? "Investment income"
-                        : "Investment buy"
-                    : TYPE_LABELS[t.type];
+                        ? "Inv income"
+                        : "Invest"
+                    : TYPE_CHIP_LABELS[t.type];
                   return (
                     <TableRow key={t.id}>
                       <TableCell className="text-sm">{format(new Date(t.occurredAt), "MMM d, yyyy")}</TableCell>
-                      <TableCell><Badge variant="muted" className="text-[10px]">{label}</Badge></TableCell>
+                      <TableCell className="w-[112px]"><Badge variant="muted" className="whitespace-nowrap text-[10px]">{label}</Badge></TableCell>
                       <TableCell className="max-w-[260px] truncate">{t.description || <span className="text-muted-foreground">—</span>}</TableCell>
                       <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">{accountLabel}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{isInvestmentFlow ? t.trade?.holding?.name ?? "Investment" : t.category?.name ?? "—"}</TableCell>
-                      <TableCell className={cn("text-right tabular font-medium", tone)}>{sign}{formatCurrency(t.amount)}</TableCell>
+                      <TableCell className={cn("w-[170px] whitespace-nowrap text-right tabular font-medium", tone)}>{sign}{formatCurrency(t.amount)}</TableCell>
                       {data.runningBalances && (
                         <TableCell className="text-right tabular text-xs text-muted-foreground">
                           {data.runningBalances[t.id] ? formatCurrency(data.runningBalances[t.id]) : "—"}

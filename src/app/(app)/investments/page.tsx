@@ -89,6 +89,11 @@ const TYPE_COLORS: Record<string, string> = {
   PROVIDENT_FUND: "hsl(var(--chart-5))",
 };
 
+const TABLE_ASSET_LABELS: Record<string, string> = {
+  FIXED_DEPOSIT: "FD",
+  PROVIDENT_FUND: "PF",
+};
+
 export default function InvestmentsPage() {
   const { data, isLoading } = useSWR<PortfolioData>("/api/investments");
   const { data: accounts } = useAccounts();
@@ -459,7 +464,7 @@ function HoldingsTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="muted" className="text-[10px]">{getAssetClassLabel(h.assetClass)}</Badge>
+                    <Badge variant="muted" className="whitespace-nowrap text-[10px]">{TABLE_ASSET_LABELS[h.assetClass] ?? getAssetClassLabel(h.assetClass)}</Badge>
                   </TableCell>
                   {isFixedIncomeTable ? (
                     <>
