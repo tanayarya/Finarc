@@ -40,6 +40,24 @@ async function markNotified(key: string) {
   });
 }
 
+function parseJsonArray(value?: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+async function setSetting(key: string, value: string) {
+  await prisma.appSetting.upsert({
+    where: { key },
+    update: { value },
+    create: { key, value },
+  });
+}
+
 // ─── Credit Due ────────────────────────────────────────────────────────
 
 export async function notifyCreditDue(): Promise<{ sent: boolean; message?: string }> {
@@ -90,8 +108,6 @@ export async function notifyBudgetExceeded(): Promise<{ sent: boolean; message?:
   const enabled = (await prisma.appSetting.findUnique({ where: { key: "notifyBudgetExceeded" } }))?.value === "true";
   if (!enabled) return { sent: false, message: "Disabled" };
 
-  if (await wasNotifiedToday("lastNotify_budgetExceeded")) return { sent: false, message: "Already notified today" };
-
   const { botToken, chatId, configured } = await getTelegramConfig();
   if (!configured) return { sent: false, message: "Telegram not configured" };
 
@@ -101,8 +117,14 @@ export async function notifyBudgetExceeded(): Promise<{ sent: boolean; message?:
 
   if (overBudget.length === 0 && nearLimit.length === 0) return { sent: false, message: "All budgets healthy" };
 
+  const sentMarkers = parseJsonArray((await prisma.appSetting.findUnique({ where: { key: "budgetAlertSentMarkers" } }))?.value);
+  const sentMarkerSet = new Set(sentMarkers);
+  const candidates = [...overBudget, ...nearLimit].filter((b) => !sentMarkerSet.has(budgetAlertMarker(b)));
+
+  if (candidates.length === 0) return { sent: false, message: "Already notified for this budget period" };
+
   const lines: string[] = [];
-  for (const b of overBudget) {
+  for (const b of candidates.filter((p) => p.status === "OVER_BUDGET")) {
     lines.push(
       `OVER BUDGET: ${b.budget.name}\n` +
       `Category: ${b.budget.category.name}\n` +
@@ -110,7 +132,7 @@ export async function notifyBudgetExceeded(): Promise<{ sent: boolean; message?:
       `Over by: ${b.spent.minus(b.allocated).toFixed(2)}`
     );
   }
-  for (const b of nearLimit) {
+  for (const b of candidates.filter((p) => p.status === "NEAR_LIMIT")) {
     lines.push(
       `NEAR LIMIT: ${b.budget.name}\n` +
       `Category: ${b.budget.category.name}\n` +
@@ -121,8 +143,21 @@ export async function notifyBudgetExceeded(): Promise<{ sent: boolean; message?:
 
   const message = `Finarc - Budget Alert\n\n${lines.join("\n\n---\n\n")}`;
   const sent = await sendTelegram(botToken!, chatId!, message);
-  if (sent) await markNotified("lastNotify_budgetExceeded");
+  if (sent) {
+    const nextMarkers = Array.from(new Set([...sentMarkers, ...candidates.map(budgetAlertMarker)])).slice(-500);
+    await setSetting("budgetAlertSentMarkers", JSON.stringify(nextMarkers));
+    await markNotified("lastNotify_budgetExceeded");
+  }
   return { sent };
+}
+
+function budgetAlertMarker(progress: Awaited<ReturnType<typeof computeBudgetProgress>>[number]) {
+  return [
+    progress.budget.id,
+    progress.budget.period,
+    progress.status,
+    progress.periodStart.toISOString().slice(0, 10),
+  ].join(":");
 }
 
 // ─── Recurring Due ─────────────────────────────────────────────────────
@@ -144,14 +179,14 @@ export async function notifyRecurringDue(): Promise<{ sent: boolean; message?: s
       status: "ACTIVE",
       nextRunDate: { gte: new Date(), lte: dayAfter },
     },
-    include: { account: true },
+    include: { account: true, sipHoldings: true },
   });
 
   if (rules.length === 0) return { sent: false, message: "No recurring due soon" };
 
   const lines = rules.map((r) =>
     `${r.name}\n` +
-    `Type: ${r.type}\n` +
+    `Type: ${recurringAlertTypeLabel(r)}\n` +
     `Amount: ${r.amount.toString()}\n` +
     `Due: ${format(r.nextRunDate, "MMM d, yyyy")}\n` +
     `Account: ${r.account?.name ?? "—"}`
@@ -216,7 +251,7 @@ export async function notifyLowBalance(): Promise<{ sent: boolean; message?: str
       status: "ACTIVE",
       nextRunDate: { gte: new Date(), lte: tomorrow },
     },
-    include: { account: true, toAccount: true },
+    include: { account: true, toAccount: true, sipHoldings: true },
   });
 
   if (rules.length === 0) return { sent: false, message: "No recurring due tomorrow" };
@@ -233,6 +268,7 @@ export async function notifyLowBalance(): Promise<{ sent: boolean; message?: str
     if (balNum < needed) {
       warnings.push(
         `Rule: ${rule.name}\n` +
+        `Type: ${recurringAlertTypeLabel(rule)}\n` +
         `Due: Tomorrow\n` +
         `Amount needed: ${needed.toFixed(2)}\n` +
         `Account: ${rule.account?.name ?? "Unknown"}\n` +
@@ -248,6 +284,24 @@ export async function notifyLowBalance(): Promise<{ sent: boolean; message?: str
   const sent = await sendTelegram(botToken!, chatId!, message);
   if (sent) await markNotified("lastNotify_lowBalance");
   return { sent };
+}
+
+function recurringAlertTypeLabel(rule: {
+  type: string;
+  name: string;
+  sipHoldings?: Array<{ type: string; assetClass: string }>;
+}) {
+  const holding = rule.sipHoldings?.find(Boolean);
+  if (holding?.type === "PROVIDENT_FUND" || /^PF:/i.test(rule.name)) return "Investment - PF contribution";
+  if (holding?.assetClass === "RECURRING_DEPOSIT" || /^RD:/i.test(rule.name)) return "Investment - RD installment";
+  if (holding || /^SIP:/i.test(rule.name)) return "Investment - SIP";
+  return {
+    INCOME: "Income",
+    EXPENSE: "Expense",
+    TRANSFER: "Transfer",
+    CREDIT_PAYMENT: "Credit card payment",
+    LOAN_PAYMENT: "Loan payment",
+  }[rule.type] ?? rule.type;
 }
 
 // ─── Run All ───────────────────────────────────────────────────────────

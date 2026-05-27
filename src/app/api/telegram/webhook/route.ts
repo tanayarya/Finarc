@@ -293,9 +293,13 @@ async function handleAIQuery(botToken: string, chatId: string, query: string) {
   }
 
   if (shareDetails) {
-    const txns = await prisma.transaction.findMany({ orderBy: { occurredAt: "desc" }, take: 30, include: { category: true, account: true } });
+    const txns = await prisma.transaction.findMany({
+      orderBy: { occurredAt: "desc" },
+      take: 30,
+      include: { category: true, account: true, trade: { include: { holding: true } } },
+    });
     context += "\nRECENT TRANSACTIONS:\n";
-    for (const t of txns) context += `- ${t.occurredAt.toISOString().slice(0, 10)} ${t.type} ${t.amount} ${t.description ?? ""} [${t.category?.name ?? ""}]\n`;
+    for (const t of txns) context += `- ${t.occurredAt.toISOString().slice(0, 10)} ${telegramTransactionTypeLabel(t)} ${t.amount} ${t.description ?? ""} [${t.category?.name ?? t.trade?.holding?.name ?? ""}]\n`;
   } else {
     const thisMonth = new Date(); thisMonth.setDate(1);
     const txns = await prisma.transaction.findMany({
@@ -334,6 +338,17 @@ async function handleAIQuery(botToken: string, chatId: string, query: string) {
   } catch {
     await sendReply(botToken, chatId, "Failed to get AI response.");
   }
+}
+
+function telegramTransactionTypeLabel(tx: { type: string; trade?: { action: string; holding: { type: string; assetClass: string } } | null }) {
+  if (tx.trade) {
+    if (tx.trade.holding.type === "PROVIDENT_FUND") return "INVESTMENT_PF";
+    if (tx.trade.holding.assetClass === "RECURRING_DEPOSIT") return "INVESTMENT_RD";
+    if (tx.trade.action === "DIVIDEND" || tx.trade.action === "INTEREST") return "INVESTMENT_INCOME";
+    if (tx.trade.action === "SELL" || tx.trade.action === "MATURITY") return "INVESTMENT_REDEMPTION";
+    return "INVESTMENT_BUY";
+  }
+  return tx.type;
 }
 
 function usesDefaultSampling(model: string) {

@@ -70,11 +70,11 @@ async function buildContext(shareDetails: boolean): Promise<string> {
     const recentTxns = await prisma.transaction.findMany({
       orderBy: { occurredAt: "desc" },
       take: 50,
-      include: { category: true, account: true },
+      include: { category: true, account: true, trade: { include: { holding: true } } },
     });
     ctx += "\nRECENT TRANSACTIONS (last 50):\n";
     for (const t of recentTxns) {
-      ctx += `- ${t.occurredAt.toISOString().slice(0, 10)} ${t.type} ${t.amount} ${t.description ?? ""} [${t.category?.name ?? ""}] [${t.account?.name ?? ""}]\n`;
+      ctx += `- ${t.occurredAt.toISOString().slice(0, 10)} ${aiTransactionTypeLabel(t)} ${t.amount} ${t.description ?? ""} [${t.category?.name ?? t.trade?.holding?.name ?? ""}] [${t.account?.name ?? ""}]\n`;
     }
   } else {
     // Only aggregates
@@ -94,6 +94,17 @@ async function buildContext(shareDetails: boolean): Promise<string> {
   }
 
   return ctx;
+}
+
+function aiTransactionTypeLabel(tx: { type: string; trade?: { action: string; holding: { type: string; assetClass: string } } | null }) {
+  if (tx.trade) {
+    if (tx.trade.holding.type === "PROVIDENT_FUND") return "INVESTMENT_PF";
+    if (tx.trade.holding.assetClass === "RECURRING_DEPOSIT") return "INVESTMENT_RD";
+    if (tx.trade.action === "DIVIDEND" || tx.trade.action === "INTEREST") return "INVESTMENT_INCOME";
+    if (tx.trade.action === "SELL" || tx.trade.action === "MATURITY") return "INVESTMENT_REDEMPTION";
+    return "INVESTMENT_BUY";
+  }
+  return tx.type;
 }
 
 async function callOpenAI(apiKey: string, model: string, systemPrompt: string, userMessage: string): Promise<string> {
