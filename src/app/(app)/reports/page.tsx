@@ -4,8 +4,8 @@ import * as React from "react";
 import useSWR from "swr";
 import { format } from "date-fns";
 import {
-  Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart,
-  ResponsiveContainer, Tooltip, XAxis, YAxis,
+  CartesianGrid, Cell, Line, LineChart, Pie, PieChart,
+  ResponsiveContainer, Sankey, Tooltip, XAxis, YAxis,
 } from "recharts";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,14 +38,19 @@ interface ComparisonData {
   previous: { label: string; income: string; expense: string; net: string; savingsRate: number; categories: Array<{ name: string; amount: number }> };
 }
 
-interface CashflowStep { name: string; value: number; type: "income" | "expense" | "net"; cumulative: number }
+interface CashflowData {
+  range: { kind: string; from: string; to: string; label: string };
+  summary: { income: number; expenses: number; debt: number; investments: number; retained: number };
+  nodes: Array<{ name: string; type: "income" | "hub" | "expense" | "debt" | "investment" | "savings"; color: string }>;
+  links: Array<{ source: number; target: number; value: number; color: string }>;
+}
 
 export default function ReportsPage() {
   const [range, setRange] = React.useState<RangeValue>({ kind: "WEEK" });
   const query = buildRangeQuery(range);
   const { data, isLoading } = useSWR<ReportData>(`/api/reports/summary?${query}`);
   const { data: comparison } = useSWR<ComparisonData>(`/api/reports/comparison?kind=${range.kind}`);
-  const { data: cashflow } = useSWR<CashflowStep[]>(`/api/reports/cashflow?kind=${range.kind}`);
+  const { data: cashflow } = useSWR<CashflowData>(`/api/reports/cashflow?${query}`);
   const { formatCurrency, formatCompactCurrency } = useCurrency();
 
   return (
@@ -172,24 +177,10 @@ export default function ReportsPage() {
 
             <TabsContent value="cashflow">
               <Card>
-                <CardHeader><CardTitle className="text-sm">Cash flow waterfall</CardTitle><CardDescription>How income flows in and expenses drain out</CardDescription></CardHeader>
+                <CardHeader><CardTitle className="text-sm">Cash flow map</CardTitle><CardDescription>How income is allocated across spending, debt, investments, and savings</CardDescription></CardHeader>
                 <CardContent>
-                  {!cashflow || cashflow.length === 0 ? (<EmptyState title="No data" description="Add transactions to see cash flow." />) : (
-                    <div className="h-[220px] w-full sm:h-[320px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={cashflow} margin={{ top: 8, right: 8, left: -16, bottom: 40 }}>
-                          <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} angle={-30} textAnchor="end" height={60} />
-                          <YAxis tickFormatter={(v) => formatCompactCurrency(v)} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} width={60} />
-                          <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12, color: "hsl(var(--popover-foreground))" }} formatter={(v: number, _n, p) => [formatCurrency(v), p.payload.type === "income" ? "Income" : p.payload.type === "net" ? "Net" : "Expense"]} />
-                          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                            {cashflow.map((s, i) => (
-                              <Cell key={i} fill={s.type === "income" ? "hsl(var(--chart-2))" : s.type === "net" ? "hsl(var(--chart-1))" : "hsl(var(--chart-5))"} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
+                  {!cashflow || cashflow.links.length === 0 ? (<EmptyState title="No data" description="Add income and expense transactions to see cash flow." />) : (
+                    <CashflowSankey data={cashflow} formatCurrency={formatCurrency} formatCompactCurrency={formatCompactCurrency} />
                   )}
                 </CardContent>
               </Card>
@@ -223,6 +214,96 @@ function CompRow({ label, current, previous, better }: { label: string; current:
       <p className={cn("text-center tabular text-sm font-semibold", better ? "text-emerald-600" : "text-rose-600")}>{current}</p>
       <p className="text-center tabular text-sm text-muted-foreground">{previous}</p>
     </div>
+  );
+}
+
+function CashflowSankey({
+  data,
+  formatCurrency,
+  formatCompactCurrency,
+}: {
+  data: CashflowData;
+  formatCurrency: (v: number) => string;
+  formatCompactCurrency: (v: number) => string;
+}) {
+  const summary = [
+    { label: "Income", value: data.summary.income, color: "bg-emerald-500" },
+    { label: "Expenses", value: data.summary.expenses, color: "bg-rose-500" },
+    { label: "Debt", value: data.summary.debt, color: "bg-amber-500" },
+    { label: "Investments", value: data.summary.investments, color: "bg-sky-500" },
+    { label: "Saved", value: data.summary.retained, color: "bg-teal-500" },
+  ].filter((item) => item.value > 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {summary.map((item) => (
+          <div key={item.label} className="rounded-md border bg-muted/20 px-3 py-2">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className={cn("h-2 w-2 rounded-full", item.color)} />
+              {item.label}
+            </div>
+            <p className="mt-1 tabular text-sm font-semibold">{formatCurrency(item.value)}</p>
+          </div>
+        ))}
+      </div>
+      <div className="h-[360px] w-full overflow-hidden rounded-md border bg-background sm:h-[480px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <Sankey
+            data={data}
+            dataKey="value"
+            nameKey="name"
+            nodePadding={22}
+            nodeWidth={12}
+            linkCurvature={0.52}
+            iterations={48}
+            margin={{ top: 24, right: 96, bottom: 24, left: 96 }}
+            node={(props) => <CashflowNode {...props} formatCompactCurrency={formatCompactCurrency} />}
+            link={<CashflowLink />}
+          >
+            <Tooltip
+              contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12, color: "hsl(var(--popover-foreground))" }}
+              formatter={(v: number) => [formatCurrency(v), "Amount"]}
+            />
+          </Sankey>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function CashflowNode(props: { x: number; y: number; width: number; height: number; payload: { name: string; value?: number; color?: string }; formatCompactCurrency: (v: number) => string }) {
+  const { x, y, width, height, payload, formatCompactCurrency } = props;
+  const isRightSide = x > 420;
+  const textX = isRightSide ? x - 8 : x + width + 8;
+  const anchor = isRightSide ? "end" : "start";
+  const labelY = y + Math.max(12, height / 2 - 4);
+
+  return (
+    <g>
+      <rect x={x} y={y} width={width} height={Math.max(4, height)} rx={3} fill={payload.color ?? "hsl(var(--primary))"} />
+      <text x={textX} y={labelY} textAnchor={anchor} fill="hsl(var(--foreground))" fontSize={11} fontWeight={600}>
+        {payload.name}
+      </text>
+      {typeof payload.value === "number" && payload.value > 0 ? (
+        <text x={textX} y={labelY + 15} textAnchor={anchor} fill="hsl(var(--muted-foreground))" fontSize={10} fontWeight={500}>
+          {formatCompactCurrency(payload.value)}
+        </text>
+      ) : null}
+    </g>
+  );
+}
+
+function CashflowLink(props: { sourceX?: number; sourceY?: number; sourceControlX?: number; targetX?: number; targetY?: number; targetControlX?: number; linkWidth?: number; payload?: { color?: string } }) {
+  const { sourceX = 0, sourceY = 0, sourceControlX = 0, targetX = 0, targetY = 0, targetControlX = 0, linkWidth = 1, payload } = props;
+  return (
+    <path
+      d={`M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
+      fill="none"
+      stroke={payload?.color ?? "hsla(204, 80%, 55%, 0.28)"}
+      strokeWidth={Math.max(1, linkWidth)}
+      strokeOpacity={0.9}
+    />
   );
 }
 
