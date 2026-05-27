@@ -553,60 +553,72 @@ function UpcomingPanel({
     .filter((c) => c.dueDay)
     .sort((a, b) => (a.daysUntilDue ?? 999) - (b.daysUntilDue ?? 999))
     .slice(0, 3);
+  const recurring = upcomingRecurring.slice(0, 4);
+  const hasItems = recurring.length > 0 || dueSoon.length > 0;
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader>
-        <CardTitle className="text-sm">Upcoming</CardTitle>
-        <CardDescription>Recurring activity & due dates</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <CalendarClock className="h-3.5 w-3.5" /> Recurring
-          </p>
-          {upcomingRecurring.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nothing scheduled.</p>
-          ) : (
-            <ul className="space-y-2">
-              {upcomingRecurring.slice(0, 5).map((r, i) => (
-                <li
-                  key={`${r.ruleId}-${i}`}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <div>
-                    <p className="font-medium">{r.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {format(new Date(r.date), "MMM d, yyyy")}
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      "tabular text-sm font-medium",
-                      r.type === "INCOME" ? "text-emerald-600" : "text-rose-600"
-                    )}
-                  >
-                    {r.type === "INCOME" ? "+" : r.type === "EXPENSE" ? "-" : ""}
-                    {formatCurrency(r.amount)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-sm">Upcoming</CardTitle>
+            <CardDescription>Recurring activity & due dates</CardDescription>
+          </div>
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted text-muted-foreground">
+            <CalendarClock className="h-4 w-4" />
+          </div>
         </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {!hasItems ? (
+          <div className="rounded-md border border-dashed bg-muted/20 px-3 py-6 text-center">
+            <p className="text-sm font-medium">Nothing due soon</p>
+            <p className="mt-1 text-xs text-muted-foreground">Recurring rules and card due dates will appear here.</p>
+          </div>
+        ) : null}
+
+        {recurring.length > 0 ? (
+          <div className="space-y-2.5">
+            <SectionLabel icon={<CalendarClock className="h-3.5 w-3.5" />} label="Recurring" />
+            <ul className="space-y-2">
+              {recurring.map((r, i) => {
+                const positive = r.type === "INCOME";
+                const isTransferLike = r.type === "TRANSFER" || r.type === "CREDIT_PAYMENT" || r.type === "LOAN_PAYMENT";
+                return (
+                  <li key={`${r.ruleId}-${i}`} className="rounded-md border bg-muted/20 px-3 py-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{r.name}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{format(new Date(r.date), "MMM d, yyyy")}</p>
+                      </div>
+                      <span className={cn("shrink-0 whitespace-nowrap tabular text-sm font-semibold", positive ? "text-emerald-600 dark:text-emerald-400" : isTransferLike ? "text-foreground" : "text-rose-600 dark:text-rose-400")}>
+                        {positive ? "+" : r.type === "EXPENSE" ? "-" : ""}
+                        {formatCurrency(r.amount)}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
+
         {dueSoon.length > 0 ? (
           <>
-            <Separator />
-            <div>
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <AlertTriangle className="h-3.5 w-3.5" /> Due dates
-              </p>
+            {recurring.length > 0 ? <Separator /> : null}
+            <div className="space-y-2.5">
+              <SectionLabel icon={<AlertTriangle className="h-3.5 w-3.5" />} label="Due dates" />
               <ul className="space-y-2">
                 {dueSoon.map((c) => (
-                  <li key={c.id} className="flex items-center justify-between text-sm">
-                    <span>{c.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {c.dueDate ? format(new Date(c.dueDate), "MMM d") : `Day ${c.dueDay}`}
-                    </span>
+                  <li key={c.id} className="rounded-md border bg-muted/20 px-3 py-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{c.name}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {c.dueDate ? format(new Date(c.dueDate), "MMM d") : `Day ${c.dueDay}`}
+                        </p>
+                      </div>
+                      <DueBadge days={c.daysUntilDue} />
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -616,6 +628,22 @@ function UpcomingPanel({
       </CardContent>
     </Card>
   );
+}
+
+function SectionLabel({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      {icon}
+      {label}
+    </p>
+  );
+}
+
+function DueBadge({ days }: { days?: number | null }) {
+  if (days === 0) return <Badge variant="destructive" className="shrink-0 whitespace-nowrap">Today</Badge>;
+  if (days !== null && days !== undefined && days <= 2) return <Badge variant="warning" className="shrink-0 whitespace-nowrap">{days}d left</Badge>;
+  if (days !== null && days !== undefined) return <Badge variant="muted" className="shrink-0 whitespace-nowrap">{days}d left</Badge>;
+  return <Badge variant="muted" className="shrink-0 whitespace-nowrap">Soon</Badge>;
 }
 
 function PortfolioWidget({ portfolio }: { portfolio: DashboardData["portfolio"] }) {
