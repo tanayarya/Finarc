@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import useSWR, { mutate } from "swr";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -598,6 +599,23 @@ function TelegramSettings() {
   );
 }
 
+type MarketAlertScanResult = {
+  sent?: boolean;
+  message?: string;
+  checked?: number;
+  candidates?: number;
+  alerts?: Array<{
+    symbol: string;
+    company: string;
+    title: string;
+    source: string;
+    url: string;
+    tone: "Positive" | "Negative" | "Risk";
+    impact: "High" | "Medium";
+    reason: string;
+  }>;
+};
+
 function MarketAlertSettings() {
   const { data: config, mutate: mutateConfig } = useSWR<{
     enabled: boolean;
@@ -615,6 +633,8 @@ function MarketAlertSettings() {
   const [newsdataKey, setNewsdataKey] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [scanning, setScanning] = React.useState(false);
+  const [sending, setSending] = React.useState(false);
+  const [scanResult, setScanResult] = React.useState<MarketAlertScanResult | null>(null);
 
   React.useEffect(() => {
     if (!config) return;
@@ -646,24 +666,33 @@ function MarketAlertSettings() {
     }
   };
 
-  const onScan = async () => {
-    setScanning(true);
+  const runScan = async (send: boolean) => {
+    send ? setSending(true) : setScanning(true);
     try {
       const res = await fetch("/api/market-alerts/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ force: true, send: false }),
+        body: JSON.stringify({ force: true, send }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error?.message ?? "Scan failed");
+      setScanResult(json?.data ?? null);
       const count = json?.data?.alerts?.length ?? 0;
-      toast.success(count ? `Found ${count} material alert${count === 1 ? "" : "s"}` : "No material alerts found");
+      if (send) {
+        if (json?.data?.sent) toast.success(`Sent ${count} market alert${count === 1 ? "" : "s"} to Telegram`);
+        else toast.info(json?.data?.message ?? "No market alert was sent");
+      } else {
+        toast.success(count ? `Found ${count} material alert${count === 1 ? "" : "s"}` : `Fetched ${json?.data?.checked ?? 0} item${json?.data?.checked === 1 ? "" : "s"}; no material alerts`);
+      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Scan failed");
+      toast.error(e instanceof Error ? e.message : send ? "Send failed" : "Scan failed");
     } finally {
-      setScanning(false);
+      send ? setSending(false) : setScanning(false);
     }
   };
+
+  const onScan = () => runScan(false);
+  const onSendNow = () => runScan(true);
 
   const allSelected = Boolean(config?.stocks.length) && config!.stocks.every((s) => symbols.includes(s.symbol));
 
@@ -747,7 +776,33 @@ function MarketAlertSettings() {
 
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={onScan} disabled={scanning || symbols.length === 0}>{scanning ? "Scanning..." : "Preview scan"}</Button>
+          <Button variant="secondary" onClick={onSendNow} disabled={sending || scanning || symbols.length === 0}>{sending ? "Sending..." : "Send test alert"}</Button>
         </div>
+        {scanResult ? (
+          <div className="rounded-md border bg-muted/20 p-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <Badge variant={scanResult.sent ? "success" : "muted"}>{scanResult.message ?? (scanResult.sent ? "Sent" : "Preview")}</Badge>
+              <span>Fetched {scanResult.checked ?? 0}</span>
+              <span>After dedupe {scanResult.candidates ?? 0}</span>
+              <span>Material {scanResult.alerts?.length ?? 0}</span>
+            </div>
+            {scanResult.alerts?.length ? (
+              <div className="mt-3 space-y-2">
+                {scanResult.alerts.map((alert) => (
+                  <a key={`${alert.symbol}-${alert.url}`} href={alert.url} target="_blank" rel="noreferrer" className="block rounded-md border bg-background px-3 py-2 hover:bg-muted/40">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium">{alert.company}</span>
+                      <Badge variant={alert.tone === "Positive" ? "success" : alert.tone === "Negative" ? "destructive" : "warning"}>{alert.tone}</Badge>
+                      <Badge variant="outline">{alert.impact}</Badge>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-xs">{alert.title}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">{alert.reason}</p>
+                  </a>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
           </>
         ) : (
           <div className="rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">

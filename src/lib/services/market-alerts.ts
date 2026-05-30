@@ -120,7 +120,7 @@ export async function runMarketAlerts(options: { force?: boolean; send?: boolean
 
   const sent = await sendTelegram(telegram.botToken!, telegram.chatId!, message);
   if (sent) await markSent(alerts.slice(0, 5));
-  return { sent, checked: rawNews.length, candidates: unseen.length, alerts: alerts.slice(0, 5) };
+  return { sent, message: sent ? "Sent" : "Telegram send failed", checked: rawNews.length, candidates: unseen.length, alerts: alerts.slice(0, 5) };
 }
 
 async function collectNews(stocks: StockTarget[], keys: { marketauxKey: string; newsdataKey: string }) {
@@ -202,18 +202,67 @@ async function classifyMaterialNews(stocks: StockTarget[], items: NewsItem[]): P
   const parsed = extractJson(raw);
   const alerts = Array.isArray(parsed?.alerts) ? parsed.alerts : [];
   const stockSymbols = new Set(stocks.map((s) => s.symbol));
-  return alerts
-    .filter((a: any) => a?.symbol && stockSymbols.has(cleanSymbol(a.symbol)) && a?.title && a?.url)
-    .map((a: any) => ({
-      symbol: cleanSymbol(a.symbol),
-      company: String(a.company ?? stocks.find((s) => s.symbol === cleanSymbol(a.symbol))?.name ?? a.symbol),
+  const normalized: ClassifiedAlert[] = [];
+  const seen = new Set<string>();
+
+  for (const a of alerts) {
+    if (!a?.title || !a?.url) continue;
+    const symbol = resolveAlertSymbol(a, stocks, items);
+    if (!symbol || !stockSymbols.has(symbol)) continue;
+    const key = `${symbol}:${newsKey({ title: String(a.title), url: String(a.url) })}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push({
+      symbol,
+      company: String(a.company ?? stocks.find((s) => s.symbol === symbol)?.name ?? symbol),
       title: String(a.title).slice(0, 160),
       source: String(a.source ?? "News"),
       url: String(a.url),
       tone: ["Positive", "Negative", "Risk"].includes(a.tone) ? a.tone : "Risk",
       impact: a.impact === "High" ? "High" : "Medium",
       reason: String(a.reason ?? "Material stock-specific update").slice(0, 120),
-    }));
+    });
+  }
+
+  return normalized;
+}
+
+function resolveAlertSymbol(alert: any, stocks: StockTarget[], items: NewsItem[]) {
+  const rawSymbol = cleanSymbol(alert?.symbol ?? "");
+  const direct = findStockBySymbol(rawSymbol, stocks);
+  if (direct) return direct.symbol;
+
+  const sourceItem = items.find((item) =>
+    normalizeText(item.url) === normalizeText(String(alert?.url ?? "")) ||
+    normalizeText(item.title) === normalizeText(String(alert?.title ?? ""))
+  );
+  const sourceMatch = sourceItem?.matchedSymbol ? findStockBySymbol(sourceItem.matchedSymbol, stocks) : undefined;
+  if (sourceMatch) return sourceMatch.symbol;
+
+  const haystack = [
+    alert?.symbol,
+    alert?.company,
+    alert?.title,
+    alert?.reason,
+    sourceItem?.title,
+    sourceItem?.description,
+  ].filter(Boolean).join(" ");
+
+  return stocks.find((stock) => matchesStockText(haystack, stock))?.symbol;
+}
+
+function findStockBySymbol(symbol: string, stocks: StockTarget[]) {
+  if (!symbol) return undefined;
+  const normalized = cleanSymbol(symbol);
+  const root = symbolRoot(normalized);
+  return stocks.find((stock) => stock.symbol === normalized || symbolRoot(stock.symbol) === root);
+}
+
+function matchesStockText(value: string, stock: StockTarget) {
+  const haystack = value.toLowerCase();
+  const root = symbolRoot(stock.symbol).toLowerCase();
+  const tokens = significantNameTokens(stock.name);
+  return haystack.includes(root) || (tokens.length > 0 && matchedTokenCount(haystack, tokens) >= Math.min(2, tokens.length));
 }
 
 async function callOpenAI(apiKey: string, model: string, system: string, user: string): Promise<string> {
@@ -313,9 +362,9 @@ function parseRss(xml: string, source: string): NewsItem[] {
 function matchesAnyStock(item: NewsItem, stocks: StockTarget[]) {
   const haystack = `${item.title} ${item.description ?? ""}`.toLowerCase();
   return stocks.some((stock) => {
-    const symbolRoot = stock.symbol.replace(/\.(NS|BO)$/i, "").toLowerCase();
-    const tokens = stock.name.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 4);
-    return haystack.includes(symbolRoot) || tokens.some((token) => haystack.includes(token));
+    const root = symbolRoot(stock.symbol).toLowerCase();
+    const tokens = significantNameTokens(stock.name);
+    return haystack.includes(root) || (tokens.length > 0 && matchedTokenCount(haystack, tokens) >= Math.min(2, tokens.length));
   });
 }
 
@@ -400,6 +449,26 @@ function parseJsonArray(value?: string | null): string[] {
 
 function cleanSymbol(symbol: string) {
   return String(symbol ?? "").trim().toUpperCase();
+}
+
+function symbolRoot(symbol: string) {
+  return cleanSymbol(symbol).replace(/\.(NS|BO)$/i, "");
+}
+
+function normalizeText(value: string) {
+  return String(value ?? "").toLowerCase().replace(/\W+/g, "");
+}
+
+function significantNameTokens(name: string) {
+  const weak = new Set(["bank", "company", "corp", "corporation", "fin", "finance", "india", "indian", "limited", "ltd", "private"]);
+  return name
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length >= 4 && !weak.has(token));
+}
+
+function matchedTokenCount(haystack: string, tokens: string[]) {
+  return tokens.filter((token) => haystack.includes(token)).length;
 }
 
 function quoteQuery(value: string) {
