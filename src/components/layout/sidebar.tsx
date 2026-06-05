@@ -30,7 +30,7 @@ export function Sidebar() {
       collapsed ? "md:w-16" : "md:w-60"
     )}>
       {/* Logo */}
-      <div className={cn("flex h-14 shrink-0 items-center border-b", collapsed ? "justify-center px-2" : "gap-2 px-4")}>
+      <div className={cn("flex h-16 shrink-0 items-center border-b", collapsed ? "justify-center px-2" : "gap-2 px-4")}>
         {collapsed ? (
           <img src="/logo.svg" alt="Finarc" className="h-6 w-6 object-contain" />
         ) : (

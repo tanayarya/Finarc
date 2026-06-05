@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
       if (term) {
         const or: Prisma.TransactionWhereInput[] = [
           { description: { contains: term, mode: "insensitive" } },
+          { category: { name: { contains: term, mode: "insensitive" } } },
         ];
         const normalizedAmount = term.replace(/[₹,\s]/g, "");
         if (/^-?\d+(\.\d{1,2})?$/.test(normalizedAmount)) {
