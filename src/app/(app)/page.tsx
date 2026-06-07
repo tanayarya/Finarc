@@ -42,7 +42,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 
 export default function DashboardPage() {
-  const [range, setRange] = React.useState<RangeValue>({ kind: "WEEK" });
+  const [range, setRange] = React.useState<RangeValue>({ kind: "MONTH" });
   const query = buildRangeQuery(range);
   const { data, isLoading, mutate } = useDashboard(query);
   const { formatCurrency } = useCurrency();
@@ -404,6 +404,14 @@ function BudgetUsageCard({
   const { formatCurrency } = useCurrency();
   const overBudget = data.filter((b) => b.status === "OVER_BUDGET").length;
   const nearLimit = data.filter((b) => b.status === "NEAR_LIMIT").length;
+  const visibleBudgets = [...data]
+    .sort((a, b) => {
+      const spentDiff = Number(b.spent) - Number(a.spent);
+      if (spentDiff !== 0) return spentDiff;
+      return b.usage - a.usage;
+    })
+    .slice(0, 5);
+
   return (
     <Card>
       <CardHeader>
@@ -425,7 +433,7 @@ function BudgetUsageCard({
         {data.length === 0 ? (
           <p className="text-sm text-muted-foreground">No budgets defined yet.</p>
         ) : (
-          data.slice(0, 4).map((b) => (
+          visibleBudgets.map((b) => (
             <div key={b.id} className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-medium">{b.category?.name ?? b.name}</span>
@@ -475,7 +483,7 @@ function CreditObligationsCard({
         {data.length === 0 ? (
           <p className="text-sm text-muted-foreground">No credit or loan accounts.</p>
         ) : (
-          data.slice(0, 3).map((c) => {
+          data.slice(0, 5).map((c) => {
             const limit = c.creditLimit ? Number(c.creditLimit) : null;
             const balance = Number(c.balance);
             const util = limit && limit > 0 ? balance / limit : null;
