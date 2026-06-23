@@ -594,8 +594,60 @@ function TelegramSettings() {
         </CardContent>
       </Card>
 
+      <IpoAlertSettings />
       <MarketAlertSettings />
     </div>
+  );
+}
+
+function IpoAlertSettings() {
+  const { data: config, mutate: mutateConfig } = useSWR<{ enabled: boolean; source: string }>("/api/ipo-alerts/config");
+  const [enabled, setEnabled] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!config) return;
+    setEnabled(config.enabled);
+  }, [config]);
+
+  const onSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/ipo-alerts/config", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error("Failed to save IPO alerts");
+      toast.success("IPO alerts saved");
+      mutateConfig();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-sm"><Newspaper className="h-4 w-4" /> Indian IPO Alerts</CardTitle>
+        <CardDescription>Telegram alerts when NSE-listed Indian IPOs are open or about to open for application.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between rounded-md border px-3 py-3">
+          <div>
+            <p className="text-sm font-medium">Enable Indian IPO alerts</p>
+            <p className="text-xs text-muted-foreground">Checks NSE current and upcoming IPO issues once per daily notification run.</p>
+          </div>
+          <Switch checked={enabled} onCheckedChange={setEnabled} />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save IPO alerts"}</Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

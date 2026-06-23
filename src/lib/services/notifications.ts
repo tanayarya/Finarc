@@ -308,6 +308,7 @@ function recurringAlertTypeLabel(rule: {
 
 export async function runAllNotifications() {
   const { runMarketAlerts } = await import("@/lib/services/market-alerts");
+  const { runIpoAlerts } = await import("@/lib/services/ipo-alerts");
   const results = {
     creditDue: await notifyCreditDue().catch((e) => ({ sent: false, message: (e as Error).message })),
     budgetExceeded: await notifyBudgetExceeded().catch((e) => ({ sent: false, message: (e as Error).message })),
@@ -315,6 +316,7 @@ export async function runAllNotifications() {
     duesDue: await notifyDuesDue().catch((e) => ({ sent: false, message: (e as Error).message })),
     lowBalance: await notifyLowBalance().catch((e) => ({ sent: false, message: (e as Error).message })),
     marketAlerts: await runMarketAlerts({ send: true }).catch((e) => ({ sent: false, message: (e as Error).message })),
+    ipoAlerts: await runIpoAlerts({ send: true }).catch((e) => ({ sent: false, message: (e as Error).message })),
   };
   return results;
 }
