@@ -18,9 +18,9 @@ interface Props {
 export function IncomeExpenseChart({ data }: Props) {
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   return (
-    <div className="h-[280px] w-full">
+    <div className="h-[340px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+        <AreaChart data={data} margin={{ top: 10, right: 10, left: -12, bottom: 4 }}>
           <defs>
             <linearGradient id="incomeFill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.35} />
@@ -32,13 +32,15 @@ export function IncomeExpenseChart({ data }: Props) {
             </linearGradient>
           </defs>
           <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+          <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={10} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
           <YAxis
             tickFormatter={(v) => formatCompactCurrency(v)}
             tickLine={false}
             axisLine={false}
             tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-            width={60}
+            width={64}
+            tickCount={7}
+            domain={[0, "dataMax"]}
           />
           <Tooltip
             cursor={{ stroke: "hsl(var(--border))" }}

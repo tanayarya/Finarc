@@ -46,12 +46,21 @@ interface CashflowData {
 }
 
 export default function ReportsPage() {
-  const [range, setRange] = React.useState<RangeValue>({ kind: "WEEK" });
+  const [range, setRange] = React.useState<RangeValue>({ kind: "MONTH" });
   const query = buildRangeQuery(range);
   const { data, isLoading } = useSWR<ReportData>(`/api/reports/summary?${query}`);
   const { data: comparison } = useSWR<ComparisonData>(`/api/reports/comparison?kind=${range.kind}`);
   const { data: cashflow } = useSWR<CashflowData>(`/api/reports/cashflow?${query}`);
   const { formatCurrency, formatCompactCurrency } = useCurrency();
+  const sortedBudgets = React.useMemo(() => {
+    if (!data) return [];
+    const priority = { OVER_BUDGET: 0, NEAR_LIMIT: 1, HEALTHY: 2 } as const;
+    return [...data.budgets].sort((a, b) => {
+      const statusDiff = priority[a.status] - priority[b.status];
+      if (statusDiff !== 0) return statusDiff;
+      return b.usage - a.usage;
+    });
+  }, [data]);
 
   return (
     <div className="space-y-6">
@@ -89,8 +98,18 @@ export default function ReportsPage() {
 
             <TabsContent value="trend">
               <Card>
-                <CardHeader><CardTitle className="text-sm">Income vs Expense</CardTitle><CardDescription>{data.range.label}</CardDescription></CardHeader>
-                <CardContent><IncomeExpenseChart data={data.series} /></CardContent>
+                <CardHeader>
+                  <CardTitle className="text-sm">Income vs expense trend</CardTitle>
+                  <CardDescription>{data.range.label}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <IncomeExpenseChart data={data.series} />
+                  <div className="grid gap-2 text-sm sm:grid-cols-3">
+                    <TrendStat label="Income" value={formatCurrency(data.totals.income)} tone="good" />
+                    <TrendStat label="Expense" value={formatCurrency(data.totals.expense)} tone="bad" />
+                    <TrendStat label="Net movement" value={formatCurrency(data.totals.net)} tone={Number(data.totals.net) >= 0 ? "good" : "bad"} />
+                  </div>
+                </CardContent>
               </Card>
             </TabsContent>
 
@@ -107,20 +126,43 @@ export default function ReportsPage() {
 
             <TabsContent value="budgets">
               <Card>
-                <CardHeader><CardTitle className="text-sm">Budget performance</CardTitle></CardHeader>
+                <CardHeader>
+                  <CardTitle className="text-sm">Budget performance</CardTitle>
+                  <CardDescription>Over-limit budgets are shown first for quick review</CardDescription>
+                </CardHeader>
                 <CardContent>
                   {data.budgets.length === 0 ? (<EmptyState title="No budgets" description="Create budgets to track performance." />) : (
-                    <ul className="space-y-3">
-                      {data.budgets.map((b) => (
-                        <li key={b.id} className="space-y-1.5">
-                          <div className="flex items-center justify-between text-sm">
-                            <div><p className="font-medium">{b.category}</p><p className="text-xs text-muted-foreground">{b.period.toLowerCase()}</p></div>
-                            <span className="tabular text-muted-foreground">{formatCurrency(b.spent)} / {formatCurrency(b.allocated)}</span>
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {sortedBudgets.map((b) => (
+                        <div key={b.id} className="rounded-md border bg-muted/15 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{b.category}</p>
+                              <p className="text-xs capitalize text-muted-foreground">{b.period.toLowerCase()}</p>
+                            </div>
+                            <span className={cn(
+                              "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                              b.status === "HEALTHY" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                              b.status === "NEAR_LIMIT" && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                              b.status === "OVER_BUDGET" && "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+                            )}>
+                              {b.status === "OVER_BUDGET" ? "Over" : b.status === "NEAR_LIMIT" ? "Near" : "Healthy"}
+                            </span>
                           </div>
-                          <Progress value={Math.min(100, b.usage * 100)} indicatorClassName={cn(b.status === "HEALTHY" && "bg-emerald-500", b.status === "NEAR_LIMIT" && "bg-amber-500", b.status === "OVER_BUDGET" && "bg-rose-500")} />
-                        </li>
+                          <div className="mt-4 flex items-end justify-between gap-3">
+                            <div>
+                              <p className="tabular text-lg font-semibold">{formatCurrency(b.spent)}</p>
+                              <p className="text-xs text-muted-foreground">of {formatCurrency(b.allocated)}</p>
+                            </div>
+                            <p className="tabular text-xs font-medium text-muted-foreground">{formatPercent(b.usage)}</p>
+                          </div>
+                          <Progress className="mt-3 h-2" value={Math.min(100, b.usage * 100)} indicatorClassName={cn(b.status === "HEALTHY" && "bg-emerald-500", b.status === "NEAR_LIMIT" && "bg-amber-500", b.status === "OVER_BUDGET" && "bg-rose-500")} />
+                          <p className={cn("mt-2 tabular text-xs", Number(b.remaining) >= 0 ? "text-muted-foreground" : "text-rose-600 dark:text-rose-400")}>
+                            {Number(b.remaining) >= 0 ? `${formatCurrency(b.remaining)} left` : `${formatCurrency(Math.abs(Number(b.remaining)))} over`}
+                          </p>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -135,16 +177,17 @@ export default function ReportsPage() {
                 <CardHeader><CardTitle className="text-sm">Period comparison</CardTitle><CardDescription>{comparison ? `${comparison.current.label} vs ${comparison.previous.label}` : "Loading..."}</CardDescription></CardHeader>
                 <CardContent>
                   {!comparison ? (<Skeleton className="h-[200px]" />) : (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-3 gap-4 text-center">
-                        <div />
-                        <p className="text-xs font-medium text-muted-foreground">{comparison.current.label}</p>
-                        <p className="text-xs font-medium text-muted-foreground">{comparison.previous.label}</p>
+                    <div className="space-y-5">
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <ComparisonMetric label="Income" current={Number(comparison.current.income)} previous={Number(comparison.previous.income)} formatValue={formatCurrency} goodWhenHigher />
+                        <ComparisonMetric label="Expenses" current={Number(comparison.current.expense)} previous={Number(comparison.previous.expense)} formatValue={formatCurrency} />
+                        <ComparisonMetric label="Net" current={Number(comparison.current.net)} previous={Number(comparison.previous.net)} formatValue={formatCurrency} goodWhenHigher />
+                        <ComparisonMetric label="Savings rate" current={comparison.current.savingsRate} previous={comparison.previous.savingsRate} formatValue={formatPercent} goodWhenHigher />
                       </div>
-                      <CompRow label="Income" current={formatCurrency(comparison.current.income)} previous={formatCurrency(comparison.previous.income)} better={Number(comparison.current.income) >= Number(comparison.previous.income)} />
-                      <CompRow label="Expenses" current={formatCurrency(comparison.current.expense)} previous={formatCurrency(comparison.previous.expense)} better={Number(comparison.current.expense) <= Number(comparison.previous.expense)} />
-                      <CompRow label="Net" current={formatCurrency(comparison.current.net)} previous={formatCurrency(comparison.previous.net)} better={Number(comparison.current.net) >= Number(comparison.previous.net)} />
-                      <CompRow label="Savings rate" current={formatPercent(comparison.current.savingsRate)} previous={formatPercent(comparison.previous.savingsRate)} better={comparison.current.savingsRate >= comparison.previous.savingsRate} />
+                      <div className="grid gap-4 lg:grid-cols-2">
+                        <ComparisonCategoryList title={comparison.current.label} categories={comparison.current.categories} formatCurrency={formatCurrency} />
+                        <ComparisonCategoryList title={comparison.previous.label} categories={comparison.previous.categories} formatCurrency={formatCurrency} />
+                      </div>
                     </div>
                   )}
                 </CardContent>
@@ -207,12 +250,102 @@ function SummaryCard({ title, value, tone }: { title: string; value: string; ton
   );
 }
 
-function CompRow({ label, current, previous, better }: { label: string; current: string; previous: string; better: boolean }) {
+function TrendStat({ label, value, tone }: { label: string; value: string; tone: "good" | "bad" }) {
   return (
-    <div className="grid grid-cols-3 items-center gap-4">
-      <p className="text-sm font-medium">{label}</p>
-      <p className={cn("text-center tabular text-sm font-semibold", better ? "text-emerald-600" : "text-rose-600")}>{current}</p>
-      <p className="text-center tabular text-sm text-muted-foreground">{previous}</p>
+    <div className="rounded-md border bg-muted/15 px-3 py-2">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={cn("mt-1 tabular text-sm font-semibold", tone === "good" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>{value}</p>
+    </div>
+  );
+}
+
+function ComparisonMetric({
+  label,
+  current,
+  previous,
+  formatValue,
+  goodWhenHigher = false,
+}: {
+  label: string;
+  current: number;
+  previous: number;
+  formatValue: (value: number) => string;
+  goodWhenHigher?: boolean;
+}) {
+  const delta = current - previous;
+  const better = goodWhenHigher ? delta >= 0 : delta <= 0;
+  const base = Math.max(Math.abs(current), Math.abs(previous), 1);
+  const currentWidth = Math.max(4, Math.min(100, (Math.abs(current) / base) * 100));
+  const previousWidth = Math.max(4, Math.min(100, (Math.abs(previous) / base) * 100));
+
+  return (
+    <div className="rounded-md border bg-muted/15 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+          <p className="mt-1 tabular text-lg font-semibold">{formatValue(current)}</p>
+        </div>
+        <span className={cn(
+          "rounded-full px-2 py-0.5 text-[11px] font-medium",
+          better ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+        )}>
+          {delta === 0 ? "No change" : `${delta > 0 ? "+" : ""}${formatValue(delta)}`}
+        </span>
+      </div>
+      <div className="mt-4 space-y-2">
+        <ComparisonBar label="Current" value={formatValue(current)} width={currentWidth} className="bg-primary" />
+        <ComparisonBar label="Previous" value={formatValue(previous)} width={previousWidth} className="bg-muted-foreground/35" />
+      </div>
+    </div>
+  );
+}
+
+function ComparisonBar({ label, value, width, className }: { label: string; value: string; width: number; className: string }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+        <span>{label}</span>
+        <span className="tabular">{value}</span>
+      </div>
+      <div className="h-2 rounded-full bg-muted">
+        <div className={cn("h-2 rounded-full", className)} style={{ width: `${width}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function ComparisonCategoryList({
+  title,
+  categories,
+  formatCurrency,
+}: {
+  title: string;
+  categories: Array<{ name: string; amount: number }>;
+  formatCurrency: (value: number) => string;
+}) {
+  const topCategories = categories.slice(0, 5);
+  const max = Math.max(...topCategories.map((c) => c.amount), 1);
+
+  return (
+    <div className="rounded-md border bg-muted/15 p-3">
+      <p className="text-sm font-medium">{title}</p>
+      {topCategories.length === 0 ? (
+        <p className="mt-3 text-sm text-muted-foreground">No category spend in this period.</p>
+      ) : (
+        <div className="mt-3 space-y-3">
+          {topCategories.map((category) => (
+            <div key={category.name} className="space-y-1">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="truncate font-medium">{category.name}</span>
+                <span className="tabular text-muted-foreground">{formatCurrency(category.amount)}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted">
+                <div className="h-1.5 rounded-full bg-rose-500" style={{ width: `${Math.max(4, (category.amount / max) * 100)}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -233,6 +366,7 @@ function CashflowSankey({
     { label: "Investments", value: data.summary.investments, color: "bg-sky-500" },
     { label: "Saved", value: data.summary.retained, color: "bg-teal-500" },
   ].filter((item) => item.value > 0);
+  const sankeyHeight = Math.max(620, data.nodes.length * 38);
 
   return (
     <div className="space-y-4">
@@ -247,17 +381,19 @@ function CashflowSankey({
           </div>
         ))}
       </div>
-      <div className="h-[360px] w-full overflow-hidden rounded-md border bg-background sm:h-[480px]">
+      <div className="w-full overflow-x-auto rounded-md border bg-background">
+        <div className="min-w-[1120px]" style={{ height: sankeyHeight }}>
         <ResponsiveContainer width="100%" height="100%">
           <Sankey
             data={data}
             dataKey="value"
             nameKey="name"
-            nodePadding={22}
+            nodePadding={26}
             nodeWidth={12}
             linkCurvature={0.52}
-            iterations={48}
-            margin={{ top: 24, right: 96, bottom: 24, left: 96 }}
+            iterations={24}
+            sort={false}
+            margin={{ top: 24, right: 170, bottom: 32, left: 96 }}
             node={(props) => <CashflowNode {...props} formatCompactCurrency={formatCompactCurrency} />}
             link={<CashflowLink />}
           >
@@ -267,6 +403,7 @@ function CashflowSankey({
             />
           </Sankey>
         </ResponsiveContainer>
+        </div>
       </div>
     </div>
   );
@@ -274,16 +411,17 @@ function CashflowSankey({
 
 function CashflowNode(props: { x: number; y: number; width: number; height: number; payload: { name: string; value?: number; color?: string }; formatCompactCurrency: (v: number) => string }) {
   const { x, y, width, height, payload, formatCompactCurrency } = props;
-  const isRightSide = x > 420;
-  const textX = isRightSide ? x - 8 : x + width + 8;
-  const anchor = isRightSide ? "end" : "start";
+  const isRightSide = x > 760;
+  const textX = isRightSide ? x + width + 10 : x + width + 8;
+  const anchor = "start";
   const labelY = y + Math.max(12, height / 2 - 4);
+  const displayName = payload.name.length > 22 ? `${payload.name.slice(0, 21)}…` : payload.name;
 
   return (
     <g>
       <rect x={x} y={y} width={width} height={Math.max(4, height)} rx={3} fill={payload.color ?? "hsl(var(--primary))"} />
       <text x={textX} y={labelY} textAnchor={anchor} fill="hsl(var(--foreground))" fontSize={11} fontWeight={600}>
-        {payload.name}
+        {displayName}
       </text>
       {typeof payload.value === "number" && payload.value > 0 ? (
         <text x={textX} y={labelY + 15} textAnchor={anchor} fill="hsl(var(--muted-foreground))" fontSize={10} fontWeight={500}>

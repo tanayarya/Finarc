@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { categoryCreateSchema } from "@/lib/validators";
 import { postJson } from "@/lib/fetcher";
+import { CATEGORY_COLORS } from "@/lib/category-colors";
 import type { z } from "zod";
 
 type FormValues = z.input<typeof categoryCreateSchema>;
@@ -36,22 +37,11 @@ interface Props {
   defaultKind?: "INCOME" | "EXPENSE";
 }
 
-const COLORS = [
-  "#0ea5e9",
-  "#22c55e",
-  "#f97316",
-  "#a855f7",
-  "#ef4444",
-  "#facc15",
-  "#06b6d4",
-  "#6366f1",
-];
-
 export function CategoryDialog({ trigger, defaultKind = "EXPENSE" }: Props) {
   const [open, setOpen] = React.useState(false);
   const form = useForm<FormValues>({
     resolver: zodResolver(categoryCreateSchema),
-    defaultValues: { name: "", kind: defaultKind, color: COLORS[0] },
+    defaultValues: { name: "", kind: defaultKind, color: CATEGORY_COLORS[0] },
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
@@ -59,7 +49,7 @@ export function CategoryDialog({ trigger, defaultKind = "EXPENSE" }: Props) {
       await postJson("/api/categories", values);
       toast.success("Category created");
       setOpen(false);
-      form.reset({ name: "", kind: defaultKind, color: COLORS[0] });
+      form.reset({ name: "", kind: defaultKind, color: CATEGORY_COLORS[0] });
       mutate(
         (key) => typeof key === "string" && key.startsWith("/api/categories"),
         undefined,
@@ -110,7 +100,7 @@ export function CategoryDialog({ trigger, defaultKind = "EXPENSE" }: Props) {
               name="color"
               render={({ field }) => (
                 <div className="flex flex-wrap gap-2">
-                  {COLORS.map((c) => (
+                  {CATEGORY_COLORS.map((c) => (
                     <button
                       key={c}
                       type="button"

@@ -121,21 +121,21 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
+            <Card className="overflow-hidden">
+              <CardHeader className="p-5 pb-3">
                 <CardTitle>Income vs Expense</CardTitle>
                 <CardDescription>{data.range.label}</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-5 pt-0">
                 <IncomeExpenseChart data={data.series} />
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
+            <Card className="overflow-hidden">
+              <CardHeader className="p-5 pb-3">
                 <CardTitle>Spending by category</CardTitle>
                 <CardDescription>Where your money goes</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-5 pt-0">
                 <CategoryPie
                   data={data.categoryBreakdown.map((c) => ({
                     name: c.name,
@@ -181,12 +181,12 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
+            <Card className="overflow-hidden">
+              <CardHeader className="p-5 pb-3">
                 <CardTitle>Account distribution</CardTitle>
                 <CardDescription>Where your assets live</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-5 pt-0">
                 {data.accountDistribution.length === 0 ? (
                   <EmptyState title="No assets yet" description="Add an account to see your distribution." />
                 ) : (
@@ -368,8 +368,8 @@ function SavingsCard({
   const { formatCurrency } = useCurrency();
   const positive = Number(net) >= 0;
   return (
-    <Card>
-      <CardHeader>
+    <Card className="overflow-hidden">
+      <CardHeader className="p-5 pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm">Savings trend</CardTitle>
           <PiggyBank className="h-4 w-4 text-muted-foreground" />
@@ -381,7 +381,7 @@ function SavingsCard({
           </Badge>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-5 pt-0">
         <SavingsTrendChart data={series.map((s) => ({ date: s.date, net: s.net }))} />
       </CardContent>
     </Card>
@@ -406,6 +406,9 @@ function BudgetUsageCard({
   const nearLimit = data.filter((b) => b.status === "NEAR_LIMIT").length;
   const visibleBudgets = [...data]
     .sort((a, b) => {
+      const priority = { OVER_BUDGET: 0, NEAR_LIMIT: 1, HEALTHY: 2 } as const;
+      const priorityDiff = priority[a.status] - priority[b.status];
+      if (priorityDiff !== 0) return priorityDiff;
       const spentDiff = Number(b.spent) - Number(a.spent);
       if (spentDiff !== 0) return spentDiff;
       return b.usage - a.usage;
@@ -413,8 +416,8 @@ function BudgetUsageCard({
     .slice(0, 5);
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="overflow-hidden">
+      <CardHeader className="p-5 pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm">Budget health</CardTitle>
           <Wallet className="h-4 w-4 text-muted-foreground" />
@@ -429,12 +432,12 @@ function BudgetUsageCard({
           ) : null}
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-2.5 p-5 pt-0">
         {data.length === 0 ? (
           <p className="text-sm text-muted-foreground">No budgets defined yet.</p>
         ) : (
           visibleBudgets.map((b) => (
-            <div key={b.id} className="space-y-1.5">
+            <div key={b.id} className="rounded-md border bg-muted/20 px-3 py-2.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-medium">{b.category?.name ?? b.name}</span>
                 <span className="tabular text-muted-foreground">
@@ -442,6 +445,7 @@ function BudgetUsageCard({
                 </span>
               </div>
               <Progress
+                className="mt-2 h-1.5"
                 value={Math.min(100, b.usage * 100)}
                 indicatorClassName={cn(
                   b.status === "HEALTHY" && "bg-emerald-500",
@@ -471,15 +475,15 @@ function CreditObligationsCard({
 }) {
   const { formatCurrency } = useCurrency();
   return (
-    <Card>
-      <CardHeader>
+    <Card className="overflow-hidden">
+      <CardHeader className="p-5 pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm">Credit obligations</CardTitle>
           <CreditCard className="h-4 w-4 text-muted-foreground" />
         </div>
         <CardDescription className="pt-1">Outstanding liabilities and utilization</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-2.5 p-5 pt-0">
         {data.length === 0 ? (
           <p className="text-sm text-muted-foreground">No credit or loan accounts.</p>
         ) : (
@@ -488,7 +492,7 @@ function CreditObligationsCard({
             const balance = Number(c.balance);
             const util = limit && limit > 0 ? balance / limit : null;
             return (
-              <div key={c.id} className="space-y-1.5">
+              <div key={c.id} className="rounded-md border bg-muted/20 px-3 py-2.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-medium">{c.name}</span>
                   <span className="tabular text-muted-foreground">
@@ -498,13 +502,14 @@ function CreditObligationsCard({
                 </div>
                 {util !== null ? (
                   <Progress
+                    className="mt-2 h-1.5"
                     value={Math.min(100, util * 100)}
                     indicatorClassName={cn(
                       util >= 0.8 ? "bg-rose-500" : util >= 0.5 ? "bg-amber-500" : "bg-emerald-500"
                     )}
                   />
                 ) : (
-                  <Progress value={Math.min(100, balance > 0 ? 50 : 0)} />
+                  <Progress className="mt-2 h-1.5" value={Math.min(100, balance > 0 ? 50 : 0)} />
                 )}
               </div>
             );

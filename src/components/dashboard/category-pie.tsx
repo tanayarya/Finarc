@@ -3,6 +3,7 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { useCurrency } from "@/components/currency-provider";
 import { formatPercent } from "@/lib/format";
+import { CATEGORY_COLORS } from "@/lib/category-colors";
 
 interface Slice {
   name: string;
@@ -11,19 +12,9 @@ interface Slice {
   color?: string | null;
 }
 
-const PALETTE = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-  "hsl(220 60% 50%)",
-  "hsl(160 60% 45%)",
-  "hsl(30 80% 55%)",
-];
-
 export function CategoryPie({ data }: { data: Slice[] }) {
   const { formatCurrency } = useCurrency();
+  const total = data.reduce((sum, item) => sum + item.amount, 0);
 
   if (data.length === 0)
     return (
@@ -32,8 +23,8 @@ export function CategoryPie({ data }: { data: Slice[] }) {
       </p>
     );
   return (
-    <div className="grid grid-cols-1 items-center gap-4 lg:grid-cols-2">
-      <div className="h-[200px] w-full">
+    <div className="grid grid-cols-1 items-center gap-4 xl:grid-cols-5">
+      <div className="relative h-[240px] w-full xl:col-span-2">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Tooltip
@@ -51,32 +42,43 @@ export function CategoryPie({ data }: { data: Slice[] }) {
             <Pie
               data={data}
               dataKey="amount"
-              innerRadius={40}
-              outerRadius={70}
+              innerRadius={58}
+              outerRadius={92}
               paddingAngle={2}
               stroke="hsl(var(--background))"
               strokeWidth={2}
             >
               {data.map((d, i) => (
-                <Cell key={d.name} fill={d.color ?? PALETTE[i % PALETTE.length]} />
+                <Cell key={d.name} fill={d.color ?? CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
               ))}
             </Pie>
           </PieChart>
         </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div className="max-w-[120px] text-center">
+            <p className="truncate text-[11px] text-muted-foreground">Total spent</p>
+            <p className="truncate tabular text-sm font-semibold">{formatCurrency(total)}</p>
+          </div>
+        </div>
       </div>
-      <ul className="space-y-1.5 text-sm">
-        {data.slice(0, 8).map((d, i) => (
-          <li key={d.name} className="flex items-center justify-between gap-3">
-            <span className="flex items-center gap-2 truncate">
-              <span
-                className="h-2.5 w-2.5 rounded-sm"
-                style={{ background: d.color ?? PALETTE[i % PALETTE.length] }}
-              />
-              <span className="truncate">{d.name}</span>
-            </span>
-            <span className="tabular text-muted-foreground">
+      <ul className="grid gap-2 text-sm sm:grid-cols-2 xl:col-span-3">
+        {data.slice(0, 10).map((d, i) => (
+          <li key={d.name} className="rounded-md border bg-muted/20 px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className="flex min-w-0 items-center gap-2">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                  style={{ background: d.color ?? CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
+                />
+                <span className="truncate font-medium">{d.name}</span>
+              </span>
+              <span className="shrink-0 tabular text-xs text-muted-foreground">
+                {formatPercent(d.share)}
+              </span>
+            </div>
+            <div className="mt-1 tabular text-xs text-muted-foreground">
               {formatCurrency(d.amount)}
-            </span>
+            </div>
           </li>
         ))}
       </ul>

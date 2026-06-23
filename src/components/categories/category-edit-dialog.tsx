@@ -14,15 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { categoryUpdateSchema } from "@/lib/validators";
 import { patchJson } from "@/lib/fetcher";
+import { CATEGORY_COLORS } from "@/lib/category-colors";
 import type { Category } from "@/hooks/use-data";
 import type { z } from "zod";
 
 type FormValues = z.input<typeof categoryUpdateSchema>;
-
-const COLORS = [
-  "#0ea5e9", "#22c55e", "#f97316", "#a855f7",
-  "#ef4444", "#facc15", "#06b6d4", "#6366f1",
-];
 
 interface Props {
   open: boolean;
@@ -33,12 +29,12 @@ interface Props {
 export function CategoryEditDialog({ open, onOpenChange, category }: Props) {
   const form = useForm<FormValues>({
     resolver: zodResolver(categoryUpdateSchema),
-    defaultValues: { name: category?.name ?? "", color: category?.color ?? COLORS[0] },
+    defaultValues: { name: category?.name ?? "", color: category?.color ?? CATEGORY_COLORS[0] },
   });
 
   React.useEffect(() => {
     if (open && category) {
-      form.reset({ name: category.name, color: category.color ?? COLORS[0] });
+      form.reset({ name: category.name, color: category.color ?? CATEGORY_COLORS[0] });
     }
   }, [open, category, form]);
 
@@ -70,7 +66,7 @@ export function CategoryEditDialog({ open, onOpenChange, category }: Props) {
             <Label>Color</Label>
             <Controller control={form.control} name="color" render={({ field }) => (
               <div className="flex flex-wrap gap-2">
-                {COLORS.map((c) => (
+                {CATEGORY_COLORS.map((c) => (
                   <button
                     key={c}
                     type="button"

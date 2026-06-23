@@ -87,10 +87,10 @@ export async function GET(req: NextRequest) {
 
     const incomeHub = addNode("Income", "income", "hsl(173 58% 44%)");
     const availableHub = addNode("Available cash", "hub", "hsl(204 80% 55%)");
-    const expensesHub = addNode("Expenses", "expense", "hsl(0 84% 62%)");
     const debtHub = addNode("Debt payments", "debt", "hsl(38 92% 50%)");
     const investmentsHub = addNode("Investments", "investment", "hsl(207 90% 54%)");
     const savingsHub = addNode("Retained savings", "savings", "hsl(160 60% 45%)");
+    const expensesHub = addNode("Expenses", "expense", "hsl(0 84% 62%)");
 
     for (const [name, value] of sortedEntries(incomeBySource)) {
       const source = addNode(name, "income", "hsl(173 58% 44%)");
@@ -98,15 +98,10 @@ export async function GET(req: NextRequest) {
     }
 
     addLink(incomeHub, availableHub, incomeTotal, "hsla(190, 75%, 62%, 0.3)");
-    addLink(availableHub, expensesHub, expenseTotal, "hsla(0, 84%, 62%, 0.22)");
     addLink(availableHub, debtHub, debtTotal, "hsla(38, 92%, 50%, 0.24)");
     addLink(availableHub, investmentsHub, investmentTotal, "hsla(207, 90%, 54%, 0.24)");
     addLink(availableHub, savingsHub, retained, "hsla(160, 60%, 45%, 0.24)");
-
-    for (const [name, value] of sortedEntries(expenseByCategory)) {
-      const target = addNode(name, "expense", "hsl(0 84% 62%)");
-      addLink(expensesHub, target, value, "hsla(0, 84%, 62%, 0.25)");
-    }
+    addLink(availableHub, expensesHub, expenseTotal, "hsla(0, 84%, 62%, 0.22)");
 
     for (const [name, value] of sortedEntries(debtByAccount)) {
       const target = addNode(name, "debt", "hsl(38 92% 50%)");
@@ -116,6 +111,11 @@ export async function GET(req: NextRequest) {
     for (const [name, value] of sortedEntries(investmentByType)) {
       const target = addNode(name, "investment", "hsl(207 90% 54%)");
       addLink(investmentsHub, target, value, "hsla(207, 90%, 54%, 0.28)");
+    }
+
+    for (const [name, value] of sortedEntries(expenseByCategory)) {
+      const target = addNode(name, "expense", "hsl(0 84% 62%)");
+      addLink(expensesHub, target, value, "hsla(0, 84%, 62%, 0.25)");
     }
 
     return ok({

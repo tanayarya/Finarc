@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
       computeBudgetProgress(),
       prisma.transaction.findMany({
         orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
-        take: 7,
+        take: 9,
         include: { category: true, account: true, fromAccount: true, toAccount: true },
       }),
       upcomingRecurring(new Date(), addDays(new Date(), 14)),
