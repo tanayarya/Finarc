@@ -53,6 +53,7 @@ interface ClassifiedAlert {
   tone: "Positive" | "Negative" | "Risk";
   impact: "High" | "Medium";
   reason: string;
+  storyKey: string;
 }
 
 export async function getMarketAlertSettings(): Promise<MarketAlertConfig & { stocks: StockTarget[]; sources: Array<{ name: string; kind: "free-rss" | "optional-api"; url: string }> }> {
@@ -61,7 +62,7 @@ export async function getMarketAlertSettings(): Promise<MarketAlertConfig & { st
   return {
     enabled: settings.get(SETTING_KEYS.enabled) === "true",
     time: settings.get(SETTING_KEYS.time) ?? "08:45",
-    symbols: parseJsonArray(settings.get(SETTING_KEYS.symbols)),
+    symbols: parseSymbolArray(settings.get(SETTING_KEYS.symbols)),
     hasMarketauxKey: Boolean(settings.get(SETTING_KEYS.marketauxKey)),
     hasNewsdataKey: Boolean(settings.get(SETTING_KEYS.newsdataKey)),
     stocks,
@@ -193,8 +194,8 @@ async function classifyMaterialNews(stocks: StockTarget[], items: NewsItem[]): P
 
   const stockList = stocks.map((s) => `${s.symbol}: ${s.name}, qty ${s.quantity}`).join("\n");
   const articleList = items.map((item, index) => `${index + 1}. ${item.title}\nSource: ${item.source}\nURL: ${item.url}\nSummary: ${(item.description ?? "").slice(0, 180)}`).join("\n\n");
-  const system = `You classify Indian stock news for a personal portfolio pre-market alert. Return ONLY compact JSON. Alert only if news is material and stock-specific. Ignore generic market commentary, old/duplicate/weak items, SEO articles, and minor price-target chatter. Never recommend buy/sell.`;
-  const user = `Portfolio stocks:\n${stockList}\n\nCandidate news:\n${articleList}\n\nReturn JSON: {"alerts":[{"symbol":"HDFCBANK.NS","company":"HDFC Bank","title":"...","source":"...","url":"...","tone":"Positive|Negative|Risk","impact":"High|Medium","reason":"max 18 words"}]}\nMax 5 alerts. If none are material, return {"alerts":[]}.`;
+  const system = `You classify Indian stock news for a personal portfolio alert. Return ONLY compact JSON. Alert only for material, stock-specific events that can reasonably affect business value or risk: results surprises, major orders/contracts, regulatory/legal action, credit rating changes, defaults, mergers/acquisitions, management changes, large capex/projects, fraud/investigation, or material guidance. Ignore neutral updates, generic market commentary, share-price movement articles, old/duplicate/weak items, SEO articles, recommendations, and price-target/brokerage chatter. Never recommend buy/sell.`;
+  const user = `Portfolio stocks:\n${stockList}\n\nCandidate news:\n${articleList}\n\nReturn JSON: {"alerts":[{"symbol":"HDFCBANK.NS","company":"HDFC Bank","title":"...","source":"...","url":"...","tone":"Positive|Negative|Risk","impact":"High|Medium","reason":"max 18 words"}]}\nMax 5 alerts. Do not return Neutral or Low impact items. If none are genuinely material, return {"alerts":[]}.`;
 
   const raw = provider === "ollama"
     ? await callOllama(ollamaUrl, ollamaModel, system, user)
@@ -209,9 +210,13 @@ async function classifyMaterialNews(stocks: StockTarget[], items: NewsItem[]): P
     if (!a?.title || !a?.url) continue;
     const symbol = resolveAlertSymbol(a, stocks, items);
     if (!symbol || !stockSymbols.has(symbol)) continue;
+    if (!isMaterialAlert(a)) continue;
+    const storyKey = alertStoryKey(symbol, String(a.title));
     const key = `${symbol}:${newsKey({ title: String(a.title), url: String(a.url) })}`;
     if (seen.has(key)) continue;
+    if (seen.has(storyKey)) continue;
     seen.add(key);
+    seen.add(storyKey);
     normalized.push({
       symbol,
       company: String(a.company ?? stocks.find((s) => s.symbol === symbol)?.name ?? symbol),
@@ -221,6 +226,7 @@ async function classifyMaterialNews(stocks: StockTarget[], items: NewsItem[]): P
       tone: ["Positive", "Negative", "Risk"].includes(a.tone) ? a.tone : "Risk",
       impact: a.impact === "High" ? "High" : "Medium",
       reason: String(a.reason ?? "Material stock-specific update").slice(0, 120),
+      storyKey,
     });
   }
 
@@ -263,6 +269,54 @@ function matchesStockText(value: string, stock: StockTarget) {
   const root = symbolRoot(stock.symbol).toLowerCase();
   const tokens = significantNameTokens(stock.name);
   return haystack.includes(root) || (tokens.length > 0 && matchedTokenCount(haystack, tokens) >= Math.min(2, tokens.length));
+}
+
+function isMaterialAlert(alert: any) {
+  if (!["Positive", "Negative", "Risk"].includes(alert?.tone)) return false;
+  if (!["High", "Medium"].includes(alert?.impact)) return false;
+  const text = `${alert?.title ?? ""} ${alert?.reason ?? ""}`.toLowerCase();
+  const neutralPatterns = [
+    "share price",
+    "stock price",
+    "trades green",
+    "trades higher",
+    "trades lower",
+    "price target",
+    "target price",
+    "brokerage",
+    "buy call",
+    "sell call",
+    "technical chart",
+    "support level",
+    "resistance level",
+  ];
+  if (neutralPatterns.some((pattern) => text.includes(pattern))) return false;
+
+  const materialPatterns = [
+    "acquisition",
+    "approval",
+    "capex",
+    "contract",
+    "default",
+    "downgrade",
+    "fraud",
+    "guidance",
+    "investigation",
+    "lawsuit",
+    "merger",
+    "order",
+    "penalty",
+    "ppa",
+    "profit",
+    "project",
+    "rating",
+    "regulatory",
+    "resignation",
+    "results",
+    "stake",
+    "upgrade",
+  ];
+  return materialPatterns.some((pattern) => text.includes(pattern));
 }
 
 async function callOpenAI(apiKey: string, model: string, system: string, user: string): Promise<string> {
@@ -324,13 +378,18 @@ async function getStockTargets(): Promise<StockTarget[]> {
 }
 
 async function removePreviouslySent(items: NewsItem[]) {
-  const sent = new Set(parseJsonArray((await prisma.appSetting.findUnique({ where: { key: SETTING_KEYS.sentKeys } }))?.value));
-  return items.filter((item) => !sent.has(newsKey(item)));
+  const sent = new Set(parseSentKeyArray((await prisma.appSetting.findUnique({ where: { key: SETTING_KEYS.sentKeys } }))?.value));
+  const stocks = await getStockTargets();
+  return items.filter((item) => {
+    if (sent.has(newsKey(item))) return false;
+    return !possibleStoryKeys(item, stocks).some((key) => sent.has(key));
+  });
 }
 
 async function markSent(alerts: ClassifiedAlert[]) {
-  const existing = parseJsonArray((await prisma.appSetting.findUnique({ where: { key: SETTING_KEYS.sentKeys } }))?.value);
-  const merged = Array.from(new Set([...existing, ...alerts.map((a) => newsKey(a))])).slice(-250);
+  const existing = parseSentKeyArray((await prisma.appSetting.findUnique({ where: { key: SETTING_KEYS.sentKeys } }))?.value);
+  const newKeys = alerts.flatMap((a) => [newsKey(a), a.storyKey, alertStoryKey(a.symbol, a.title)]);
+  const merged = Array.from(new Set([...existing, ...newKeys])).slice(-500);
   await setSetting(SETTING_KEYS.sentKeys, JSON.stringify(merged));
   await setSetting(SETTING_KEYS.lastChecked, new Date().toISOString());
 }
@@ -381,7 +440,50 @@ function dedupeNews(items: NewsItem[]) {
 }
 
 function newsKey(item: Pick<NewsItem, "url" | "title">) {
-  return (item.url || item.title).toLowerCase().replace(/\W+/g, "").slice(0, 120);
+  return (item.url || item.title).toLowerCase().replace(/\W+/g, "").slice(0, 160);
+}
+
+function possibleStoryKeys(item: NewsItem, stocks: StockTarget[]) {
+  return stocks
+    .filter((stock) => item.matchedSymbol ? findStockBySymbol(item.matchedSymbol, [stock]) : matchesStockText(`${item.title} ${item.description ?? ""}`, stock))
+    .map((stock) => alertStoryKey(stock.symbol, item.title));
+}
+
+function alertStoryKey(symbol: string, title: string) {
+  const tokens = significantTitleTokens(title);
+  const keyText = tokens.length ? tokens.slice(0, 8).join("-") : normalizeText(title).slice(0, 80);
+  return `story:${cleanSymbol(symbol).toLowerCase()}:${keyText}`;
+}
+
+function significantTitleTokens(title: string) {
+  const weak = new Set([
+    "after",
+    "ahead",
+    "bank",
+    "company",
+    "corp",
+    "india",
+    "indian",
+    "limited",
+    "ltd",
+    "market",
+    "markets",
+    "news",
+    "price",
+    "share",
+    "shares",
+    "stock",
+    "stocks",
+    "today",
+    "trades",
+  ]);
+  return Array.from(new Set(
+    title
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length >= 4 && !weak.has(token))
+  )).sort();
 }
 
 function validNewsItem(item: NewsItem) {
@@ -437,14 +539,22 @@ async function setSetting(key: string, value: string) {
   await prisma.appSetting.upsert({ where: { key }, update: { value }, create: { key, value } });
 }
 
-function parseJsonArray(value?: string | null): string[] {
+function parseStringArray(value?: string | null): string[] {
   if (!value) return [];
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string").map(cleanSymbol).filter(Boolean) : [];
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()) : [];
   } catch {
     return [];
   }
+}
+
+function parseSymbolArray(value?: string | null) {
+  return parseStringArray(value).map(cleanSymbol).filter(Boolean);
+}
+
+function parseSentKeyArray(value?: string | null) {
+  return parseStringArray(value).map((key) => key.toLowerCase());
 }
 
 function cleanSymbol(symbol: string) {
