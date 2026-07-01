@@ -302,6 +302,9 @@ function SavingsInterestReviewCard({
     setAmount(primary.amount);
   }, [primary.amount, primary.accountId, primary.periodStart]);
 
+  const normalizedAmount = amount.startsWith(".") ? `0${amount}` : amount;
+  const isValidAmount = /^\d+(\.\d{1,2})?$/.test(normalizedAmount) && Number(normalizedAmount) > 0;
+
   const approve = async () => {
     try {
       setSaving(true);
@@ -309,7 +312,7 @@ function SavingsInterestReviewCard({
         accountId: primary.accountId,
         periodStart: primary.periodStart,
         periodEnd: primary.periodEnd,
-        amount,
+        amount: normalizedAmount,
       });
       toast.success("Savings interest recorded");
       onDone();
@@ -343,12 +346,15 @@ function SavingsInterestReviewCard({
               className="h-9 tabular"
               inputMode="decimal"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (/^\d*(\.\d{0,2})?$/.test(next)) setAmount(next);
+              }}
               aria-label="Savings interest amount"
             />
           </div>
-          <Button size="sm" onClick={approve} disabled={saving}>
-            {saving ? "Saving..." : `Approve ${formatCurrency(amount)}`}
+          <Button size="sm" onClick={approve} disabled={saving || !isValidAmount}>
+            {saving ? "Saving..." : isValidAmount ? `Approve ${formatCurrency(normalizedAmount)}` : "Approve"}
           </Button>
         </div>
       </CardContent>

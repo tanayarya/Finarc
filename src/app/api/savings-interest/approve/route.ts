@@ -14,7 +14,11 @@ const approveSchema = z.object({
   amount: z
     .union([z.string(), z.number()])
     .optional()
-    .transform((v) => (v === undefined || v === "" ? undefined : v.toString()))
+    .transform((v) => {
+      if (v === undefined || v === "") return undefined;
+      const amount = v.toString();
+      return amount.startsWith(".") ? `0${amount}` : amount;
+    })
     .refine((v) => v === undefined || /^\d+(\.\d{1,2})?$/.test(v), "Enter a valid amount"),
 });
 
