@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { mutate } from "swr";
-import { Plus, Trash2, Tag, Pencil } from "lucide-react";
+import { CircleAlert, PiggyBank, Plus, Target, Trash2, Tag, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,16 @@ export default function BudgetsPage() {
   const { formatCurrency } = useCurrency();
   const [editBudget, setEditBudget] = React.useState<BudgetWithProgress | null>(null);
   const [editCat, setEditCat] = React.useState<Category | null>(null);
+  const budgetSummary = React.useMemo(() => {
+    const rows = budgets ?? [];
+    const totalAllocated = rows.reduce((sum, b) => sum + Number(b.allocated), 0);
+    const totalSpent = rows.reduce((sum, b) => sum + Number(b.spent), 0);
+    const remaining = totalAllocated - totalSpent;
+    const overBudget = rows.filter((b) => b.status === "OVER_BUDGET").length;
+    const usage = totalAllocated > 0 ? totalSpent / totalAllocated : 0;
+
+    return { totalAllocated, totalSpent, remaining, overBudget, usage };
+  }, [budgets]);
 
   const onDelete = async (b: BudgetWithProgress) => {
     const ok = await confirm({
@@ -77,6 +87,34 @@ export default function BudgetsPage() {
           <BudgetDialog trigger={<Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" /> New budget</Button>} />
         </div>
       </div>
+
+      {isLoading ? (
+        <div className="grid gap-3 md:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (<Skeleton key={i} className="h-[116px]" />))}
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-3">
+          <BudgetKpiCard
+            icon={Target}
+            label="Total planned"
+            value={formatCurrency(budgetSummary.totalAllocated)}
+            detail={`${(budgets ?? []).length} active ${(budgets ?? []).length === 1 ? "budget" : "budgets"}`}
+          />
+          <BudgetKpiCard
+            icon={PiggyBank}
+            label="Used so far"
+            value={formatCurrency(budgetSummary.totalSpent)}
+            detail={`${formatPercent(budgetSummary.usage)} of planned budget`}
+          />
+          <BudgetKpiCard
+            icon={CircleAlert}
+            label={budgetSummary.remaining >= 0 ? "Still available" : "Over planned"}
+            value={formatCurrency(Math.abs(budgetSummary.remaining))}
+            detail={budgetSummary.overBudget > 0 ? `${budgetSummary.overBudget} over budget` : "All tracked budgets within plan"}
+            tone={budgetSummary.remaining < 0 || budgetSummary.overBudget > 0 ? "danger" : "success"}
+          />
+        </div>
+      )}
 
       <Tabs defaultValue="budgets">
         <TabsList>
@@ -155,6 +193,43 @@ export default function BudgetsPage() {
       <BudgetEditDialog open={Boolean(editBudget)} onOpenChange={(o) => { if (!o) setEditBudget(null); }} budget={editBudget} />
       <CategoryEditDialog open={Boolean(editCat)} onOpenChange={(o) => { if (!o) setEditCat(null); }} category={editCat} />
     </div>
+  );
+}
+
+function BudgetKpiCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone = "default",
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  detail: string;
+  tone?: "default" | "success" | "danger";
+}) {
+  return (
+    <Card>
+      <CardContent className="flex items-start justify-between gap-4 p-4">
+        <div className="min-w-0 space-y-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+          <p className="tabular text-2xl font-semibold tracking-tight">{value}</p>
+          <p className={cn(
+            "text-xs text-muted-foreground",
+            tone === "success" && "text-emerald-600 dark:text-emerald-400",
+            tone === "danger" && "text-rose-600 dark:text-rose-400"
+          )}>{detail}</p>
+        </div>
+        <div className={cn(
+          "rounded-md border bg-muted p-2 text-muted-foreground",
+          tone === "success" && "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-400",
+          tone === "danger" && "border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-400"
+        )}>
+          <Icon className="h-4 w-4" />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
