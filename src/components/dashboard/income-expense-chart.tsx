@@ -13,9 +13,10 @@ import { useCurrency } from "@/components/currency-provider";
 
 interface Props {
   data: Array<{ date: string; income: number; expense: number; net: number }>;
+  xAxisInterval?: number | "preserveStart" | "preserveEnd" | "preserveStartEnd" | "equidistantPreserveStart";
 }
 
-export function IncomeExpenseChart({ data }: Props) {
+export function IncomeExpenseChart({ data, xAxisInterval = "preserveStartEnd" }: Props) {
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   return (
     <div className="h-[340px] w-full">
@@ -32,7 +33,7 @@ export function IncomeExpenseChart({ data }: Props) {
             </linearGradient>
           </defs>
           <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={10} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+          <XAxis dataKey="date" interval={xAxisInterval} tickLine={false} axisLine={false} tickMargin={10} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
           <YAxis
             tickFormatter={(v) => formatCompactCurrency(v)}
             tickLine={false}

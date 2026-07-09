@@ -103,7 +103,7 @@ export default function ReportsPage() {
                   <CardDescription>{data.range.label}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <IncomeExpenseChart data={data.series} />
+                  <IncomeExpenseChart data={data.series} xAxisInterval={data.range.kind === "MONTH" ? 0 : "preserveStartEnd"} />
                   <div className="grid gap-2 text-sm sm:grid-cols-3">
                     <TrendStat label="Income" value={formatCurrency(data.totals.income)} tone="good" />
                     <TrendStat label="Expense" value={formatCurrency(data.totals.expense)} tone="bad" />

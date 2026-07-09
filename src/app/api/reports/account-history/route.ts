@@ -6,7 +6,7 @@ import { applyTxnToBalance } from "@/lib/finance/balances";
 import {
   eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval,
   startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear,
-  subWeeks, subMonths, subYears, format, endOfDay,
+  format, endOfDay,
 } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -23,17 +23,17 @@ export async function GET(req: NextRequest) {
     let points: Date[];
 
     if (kind === "WEEK") {
-      from = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
-      to = endOfDay(now);
+      from = startOfWeek(now, { weekStartsOn: 1 });
+      to = endOfWeek(now, { weekStartsOn: 1 });
       points = eachDayOfInterval({ start: from, end: to });
     } else if (kind === "YEAR") {
-      from = startOfYear(subYears(now, 1));
-      to = endOfDay(now);
+      from = startOfYear(now);
+      to = endOfYear(now);
       points = eachMonthOfInterval({ start: from, end: to });
     } else {
       // MONTH
-      from = startOfMonth(subMonths(now, 1));
-      to = endOfDay(now);
+      from = startOfMonth(now);
+      to = endOfMonth(now);
       points = eachDayOfInterval({ start: from, end: to });
     }
 

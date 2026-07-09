@@ -8,7 +8,7 @@ import { Decimal } from "decimal.js";
 import {
   eachDayOfInterval, eachMonthOfInterval, eachWeekOfInterval,
   startOfWeek, startOfMonth, startOfYear,
-  subWeeks, subMonths, subYears, endOfDay, endOfMonth, format,
+  addYears, endOfWeek, endOfMonth, endOfDay, format,
 } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -24,14 +24,14 @@ export async function GET(req: NextRequest) {
     let points: Date[];
 
     if (kind === "WEEK") {
-      from = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
-      points = eachDayOfInterval({ start: from, end: now });
+      from = startOfWeek(now, { weekStartsOn: 1 });
+      points = eachDayOfInterval({ start: from, end: endOfWeek(now, { weekStartsOn: 1 }) });
     } else if (kind === "MONTH") {
-      from = startOfMonth(subMonths(now, 1));
-      points = eachDayOfInterval({ start: from, end: now });
+      from = startOfMonth(now);
+      points = eachDayOfInterval({ start: from, end: endOfMonth(now) });
     } else {
-      from = startOfYear(subYears(now, 1));
-      points = eachMonthOfInterval({ start: from, end: now });
+      from = startOfYear(now);
+      points = eachMonthOfInterval({ start: from, end: addYears(from, 1) });
     }
 
     const accounts = await prisma.account.findMany({ where: { archived: false } });

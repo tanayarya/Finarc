@@ -53,7 +53,7 @@ export async function incomeExpenseSeries(range: DateRange): Promise<SeriesPoint
     orderBy: { occurredAt: "asc" },
   });
 
-  const useDaily = range.kind === "WEEK" || (range.kind === "CUSTOM" && diffDays(range.from, range.to) <= 45);
+  const useDaily = range.kind === "WEEK" || range.kind === "MONTH" || (range.kind === "CUSTOM" && diffDays(range.from, range.to) <= 45);
 
   if (useDaily) {
     const days = eachDayOfInterval({ start: range.from, end: range.to });
