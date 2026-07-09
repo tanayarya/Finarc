@@ -3,6 +3,8 @@ import { ok, handleError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { toMoney, ZERO } from "@/lib/money";
 import { applyTxnToBalance, isAsset, isLiability } from "@/lib/finance/balances";
+import { currentHoldingValue } from "@/lib/services/investments";
+import { Decimal } from "decimal.js";
 import {
   eachDayOfInterval, eachMonthOfInterval, eachWeekOfInterval,
   startOfWeek, startOfMonth, startOfYear,
@@ -39,7 +41,10 @@ export async function GET(req: NextRequest) {
     });
 
     // Get investment holdings for investment filters
-    const holdings = await prisma.holding.findMany({ where: { archived: false } });
+    const holdings = await prisma.holding.findMany({
+      where: { archived: false },
+      include: { trades: { orderBy: { occurredAt: "asc" } } },
+    });
 
     const series = points.map((point) => {
       const asOf = kind === "YEAR" ? endOfMonth(point) : endOfDay(point);
@@ -67,9 +72,9 @@ export async function GET(req: NextRequest) {
           if (filter === "FD" && h.type !== "FIXED_DEPOSIT") continue;
           if (filter === "PF" && h.type !== "PROVIDENT_FUND") continue;
           if (filter === "GOLD" && h.assetClass !== "GOLD") continue;
-          const units = Number(h.units);
-          const price = Number(h.currentPrice ?? h.avgBuyPrice);
-          investmentValue += units * price;
+          const units = new Decimal(h.units.toString());
+          const price = h.currentPrice ? new Decimal(h.currentPrice.toString()) : new Decimal(h.avgBuyPrice.toString());
+          investmentValue += currentHoldingValue(h, units.mul(price), asOf).toNumber();
         }
       }
 

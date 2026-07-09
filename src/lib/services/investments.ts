@@ -296,16 +296,28 @@ function isFungibleHoldingInput(input: Pick<BuyInput, "type" | "assetClass">) {
   return input.type === "STOCK" || input.type === "MUTUAL_FUND" || input.type === "COMMODITY";
 }
 
-function projectedHoldingValue(
-  holding: Holding & { trades: Array<{ action: TradeAction; amount: Decimal; occurredAt: Date }> },
-  fallbackValue: Decimal
+type HoldingForValuation = Holding & {
+  trades: Array<{ action: TradeAction; amount: Decimal; netAmount: Decimal; occurredAt: Date }>;
+};
+
+export function currentHoldingValue(
+  holding: HoldingForValuation,
+  fallbackValue: Decimal,
+  asOf = new Date()
 ) {
+  if (holding.type === "BOND") {
+    const principal = holding.principalAmount
+      ? new Decimal(holding.principalAmount.toString())
+      : fallbackValue;
+    return principal.plus(bondNetInterestToDate(holding, principal, asOf)).toDecimalPlaces(2);
+  }
+
   if (!isInterestBearingHolding(holding)) return fallbackValue;
   if (holding.interestFreq !== "ON_MATURITY" || !holding.interestRate) return fallbackValue;
 
-  const endDate = holding.maturityDate && holding.maturityDate < new Date()
+  const endDate = holding.maturityDate && holding.maturityDate < asOf
     ? holding.maturityDate
-    : new Date();
+    : asOf;
   const rate = new Decimal(holding.interestRate.toString()).div(100);
   const buyLots = holding.trades.filter((t) => t.action === "BUY" || t.action === "SIP_BUY");
 
@@ -324,6 +336,28 @@ function projectedHoldingValue(
   const startDate = buyLots[0]?.occurredAt ?? holding.createdAt;
   const days = daysBetween(startDate, endDate);
   return principal.plus(principal.mul(rate).mul(days).div(365)).toDecimalPlaces(2);
+}
+
+export function bondNetInterestToDate(
+  holding: HoldingForValuation,
+  principal: Decimal,
+  asOf = new Date()
+) {
+  if (holding.type !== "BOND" || !holding.interestRate) return ZERO;
+
+  const buyLots = holding.trades.filter((t) => t.action === "BUY" || t.action === "SIP_BUY");
+  const purchaseDate = buyLots[0]?.occurredAt ?? holding.createdAt;
+  const endDate = holding.maturityDate && holding.maturityDate < asOf ? holding.maturityDate : asOf;
+  const days = daysBetween(purchaseDate, endDate);
+  const rate = new Decimal(holding.interestRate.toString());
+  const tdsRate = holding.bondTdsRate ? new Decimal(holding.bondTdsRate.toString()) : new Decimal(10);
+  const accruedGross = principal.mul(rate).mul(days).div(36500);
+  const accruedNet = accruedGross.minus(accruedGross.mul(tdsRate).div(100));
+  const recordedNet = holding.trades
+    .filter((t) => t.action === "INTEREST" && t.occurredAt <= asOf)
+    .reduce((total, t) => total.plus(t.netAmount.toString()), ZERO);
+
+  return Decimal.max(accruedNet, recordedNet, ZERO).toDecimalPlaces(2);
 }
 
 function daysBetween(start: Date, end: Date) {
@@ -477,10 +511,19 @@ export async function getPortfolioSummary() {
     const avgPrice = new Decimal(h.avgBuyPrice.toString());
     const currentPrice = h.currentPrice ? new Decimal(h.currentPrice.toString()) : avgPrice;
     const invested = units.mul(avgPrice);
-    const currentValue = projectedHoldingValue(h, units.mul(currentPrice));
-    const incomeEarned = h.trades
-      .filter((t) => t.action === "INTEREST" || t.action === "DIVIDEND")
-      .reduce((total, t) => total.plus(t.netAmount.toString()), new Decimal(0));
+    const fallbackValue = units.mul(currentPrice);
+    const bondIncomeEarned = h.type === "BOND"
+      ? bondNetInterestToDate(
+          h,
+          h.principalAmount ? new Decimal(h.principalAmount.toString()) : fallbackValue
+        )
+      : ZERO;
+    const currentValue = currentHoldingValue(h, fallbackValue);
+    const incomeEarned = h.type === "BOND"
+      ? bondIncomeEarned
+      : h.trades
+          .filter((t) => t.action === "INTEREST" || t.action === "DIVIDEND")
+          .reduce((total, t) => total.plus(t.netAmount.toString()), new Decimal(0));
     const pnl = currentValue.minus(invested);
     const pnlPercent = invested.isZero() ? 0 : pnl.div(invested).mul(100).toNumber();
 
