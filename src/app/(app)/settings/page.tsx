@@ -568,7 +568,7 @@ function TelegramSettings() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
-            <div><p className="text-sm font-medium">Credit card due reminders</p><p className="text-xs text-muted-foreground">Notify when a credit card payment is due within 5 days</p></div>
+            <div><p className="text-sm font-medium">Credit card due reminders</p><p className="text-xs text-muted-foreground">Notify once, 2 days before a credit card payment is due</p></div>
             <Switch checked={config?.notifications.creditDue ?? false} onCheckedChange={(v) => onToggle("notifyCreditDue", v)} />
           </div>
           <Separator />

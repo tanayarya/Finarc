@@ -60,11 +60,9 @@ async function setSetting(key: string, value: string) {
 
 // ─── Credit Due ────────────────────────────────────────────────────────
 
-export async function notifyCreditDue(): Promise<{ sent: boolean; message?: string }> {
+export async function notifyCreditDue(): Promise<{ sent: boolean; message?: string; count?: number }> {
   const enabled = (await prisma.appSetting.findUnique({ where: { key: "notifyCreditDue" } }))?.value === "true";
   if (!enabled) return { sent: false, message: "Disabled" };
-
-  if (await wasNotifiedToday("lastNotify_creditDue")) return { sent: false, message: "Already notified today" };
 
   const { botToken, chatId, configured } = await getTelegramConfig();
   if (!configured) return { sent: false, message: "Telegram not configured" };
@@ -75,31 +73,47 @@ export async function notifyCreditDue(): Promise<{ sent: boolean; message?: stri
 
   const today = new Date();
   const notifications: string[] = [];
+  const sentMarkers = parseJsonArray((await prisma.appSetting.findUnique({ where: { key: "creditDueAlertSentMarkers" } }))?.value);
+  const sentMarkerSet = new Set(sentMarkers);
+  const nextMarkers: string[] = [];
 
   for (const account of creditAccounts) {
     if (!account.dueDay) continue;
     const daysUntilDue = daysUntilCreditDue(account.dueDay, today);
 
-    if (daysUntilDue <= 5) {
-      const balance = await computeAccountBalance(account.id);
-      if (balance.lte(0)) continue;
-      const dueDate = nextCreditDueDate(account.dueDay, today);
-      notifications.push(
-        `Card: ${account.name}\n` +
-        `Due Amount: ${balance.toFixed(2)}\n` +
-        `Due Date: ${format(dueDate, "MMM d, yyyy")}\n` +
-        `Days Left: ${daysUntilDue}\n` +
-        `Status: ${daysUntilDue === 0 ? "DUE TODAY" : daysUntilDue <= 2 ? "URGENT" : "UPCOMING"}`
-      );
-    }
+    if (daysUntilDue !== 2) continue;
+
+    const dueDate = nextCreditDueDate(account.dueDay, today);
+    const marker = creditDueAlertMarker(account.id, dueDate);
+    if (sentMarkerSet.has(marker)) continue;
+
+    const balance = await computeAccountBalance(account.id);
+    if (balance.lte(0)) continue;
+
+    nextMarkers.push(marker);
+    notifications.push(
+      `Card: ${account.name}\n` +
+      `Due Amount: ${balance.toFixed(2)}\n` +
+      `Due Date: ${format(dueDate, "MMM d, yyyy")}\n` +
+      `Days Left: ${daysUntilDue}\n` +
+      `Status: DUE IN 2 DAYS`
+    );
   }
 
-  if (notifications.length === 0) return { sent: false, message: "No cards due within 5 days" };
+  if (notifications.length === 0) return { sent: false, message: "No cards due in 2 days" };
 
   const message = `Finarc - Credit Card Reminder\n\n${notifications.join("\n\n---\n\n")}`;
   const sent = await sendTelegram(botToken!, chatId!, message);
-  if (sent) await markNotified("lastNotify_creditDue");
-  return { sent };
+  if (sent) {
+    const markers = Array.from(new Set([...sentMarkers, ...nextMarkers])).slice(-500);
+    await setSetting("creditDueAlertSentMarkers", JSON.stringify(markers));
+    await markNotified("lastNotify_creditDue");
+  }
+  return { sent, count: sent ? notifications.length : 0 };
+}
+
+function creditDueAlertMarker(accountId: string, dueDate: Date) {
+  return ["creditDue", accountId, dueDate.toISOString().slice(0, 10)].join(":");
 }
 
 // ─── Budget Exceeded ───────────────────────────────────────────────────
