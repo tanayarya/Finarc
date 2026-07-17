@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { format } from "date-fns";
 import {
   CartesianGrid, Cell, Line, LineChart, Pie, PieChart,
-  ResponsiveContainer, Sankey, Tooltip, XAxis, YAxis,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -366,7 +366,7 @@ function CashflowSankey({
     { label: "Investments", value: data.summary.investments, color: "bg-sky-500" },
     { label: "Saved", value: data.summary.retained, color: "bg-teal-500" },
   ].filter((item) => item.value > 0);
-  const sankeyHeight = Math.max(620, data.nodes.length * 38);
+  const chart = React.useMemo(() => buildCashflowLayout(data), [data]);
 
   return (
     <div className="space-y-4">
@@ -382,67 +382,191 @@ function CashflowSankey({
         ))}
       </div>
       <div className="w-full overflow-x-auto rounded-md border bg-background">
-        <div className="min-w-[1120px]" style={{ height: sankeyHeight }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <Sankey
-            data={data}
-            dataKey="value"
-            nameKey="name"
-            nodePadding={26}
-            nodeWidth={12}
-            linkCurvature={0.52}
-            iterations={24}
-            sort={false}
-            margin={{ top: 24, right: 170, bottom: 32, left: 96 }}
-            node={(props) => <CashflowNode {...props} formatCompactCurrency={formatCompactCurrency} />}
-            link={<CashflowLink />}
-          >
-            <Tooltip
-              contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12, color: "hsl(var(--popover-foreground))" }}
-              formatter={(v: number) => [formatCurrency(v), "Amount"]}
-            />
-          </Sankey>
-        </ResponsiveContainer>
+        <div className="min-w-[1120px]">
+          <svg viewBox={`0 0 ${chart.width} ${chart.height}`} className="block h-auto w-full" role="img" aria-label="Cash flow map">
+            <defs>
+              <filter id="cashflow-node-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodColor="hsl(var(--background))" floodOpacity="0.55" />
+              </filter>
+            </defs>
+            <g fill="none">
+              {chart.links.map((link) => (
+                <path
+                  key={link.id}
+                  d={cashflowPath(link)}
+                  stroke={link.color}
+                  strokeWidth={link.width}
+                  strokeLinecap="round"
+                  strokeOpacity={0.72}
+                >
+                  <title>{`${link.sourceName} → ${link.targetName}: ${formatCurrency(link.value)}`}</title>
+                </path>
+              ))}
+            </g>
+            <g>
+              {chart.nodes.map((node) => (
+                <CashflowNode key={node.id} node={node} formatCompactCurrency={formatCompactCurrency} />
+              ))}
+            </g>
+          </svg>
         </div>
       </div>
     </div>
   );
 }
 
-function CashflowNode(props: { x: number; y: number; width: number; height: number; payload: { name: string; value?: number; color?: string }; formatCompactCurrency: (v: number) => string }) {
-  const { x, y, width, height, payload, formatCompactCurrency } = props;
-  const isRightSide = x > 760;
-  const textX = isRightSide ? x + width + 10 : x + width + 8;
-  const anchor = "start";
-  const labelY = y + Math.max(12, height / 2 - 4);
-  const displayName = payload.name.length > 22 ? `${payload.name.slice(0, 21)}…` : payload.name;
+type CashflowLayoutNode = {
+  id: number;
+  name: string;
+  type: CashflowData["nodes"][number]["type"];
+  color: string;
+  value: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  labelSide: "left" | "right";
+};
+
+type CashflowLayoutLink = {
+  id: string;
+  source: CashflowLayoutNode;
+  target: CashflowLayoutNode;
+  sourceName: string;
+  targetName: string;
+  value: number;
+  color: string;
+  width: number;
+};
+
+function CashflowNode({ node, formatCompactCurrency }: { node: CashflowLayoutNode; formatCompactCurrency: (v: number) => string }) {
+  const labelX = node.labelSide === "left" ? node.x - 12 : node.x + node.width + 12;
+  const anchor = node.labelSide === "left" ? "end" : "start";
+  const labelY = node.y + node.height / 2 - 3;
+  const displayName = node.name.length > 24 ? `${node.name.slice(0, 23)}…` : node.name;
 
   return (
     <g>
-      <rect x={x} y={y} width={width} height={Math.max(4, height)} rx={3} fill={payload.color ?? "hsl(var(--primary))"} />
-      <text x={textX} y={labelY} textAnchor={anchor} fill="hsl(var(--foreground))" fontSize={11} fontWeight={600}>
+      <rect x={node.x} y={node.y} width={node.width} height={node.height} rx={4} fill={node.color} filter="url(#cashflow-node-shadow)" />
+      <text x={labelX} y={labelY} textAnchor={anchor} fill="hsl(var(--foreground))" fontSize={13} fontWeight={650}>
         {displayName}
       </text>
-      {typeof payload.value === "number" && payload.value > 0 ? (
-        <text x={textX} y={labelY + 15} textAnchor={anchor} fill="hsl(var(--muted-foreground))" fontSize={10} fontWeight={500}>
-          {formatCompactCurrency(payload.value)}
+      {node.value > 0 ? (
+        <text x={labelX} y={labelY + 17} textAnchor={anchor} fill="hsl(var(--muted-foreground))" fontSize={11} fontWeight={500}>
+          {formatCompactCurrency(node.value)}
         </text>
       ) : null}
     </g>
   );
 }
 
-function CashflowLink(props: { sourceX?: number; sourceY?: number; sourceControlX?: number; targetX?: number; targetY?: number; targetControlX?: number; linkWidth?: number; payload?: { color?: string } }) {
-  const { sourceX = 0, sourceY = 0, sourceControlX = 0, targetX = 0, targetY = 0, targetControlX = 0, linkWidth = 1, payload } = props;
-  return (
-    <path
-      d={`M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
-      fill="none"
-      stroke={payload?.color ?? "hsla(204, 80%, 55%, 0.28)"}
-      strokeWidth={Math.max(1, linkWidth)}
-      strokeOpacity={0.9}
-    />
-  );
+function buildCashflowLayout(data: CashflowData) {
+  const width = 1180;
+  const terminalIds = data.nodes
+    .map((node, index) => ({ node, index }))
+    .filter(({ node }) => !["Income", "Available cash", "Debt payments", "Investments", "Expenses"].includes(node.name))
+    .map(({ index }) => index);
+  const height = Math.max(560, terminalIds.length * 54 + 160);
+  const maxValue = Math.max(...data.links.map((link) => link.value), 1);
+  const valueByNode = new Map<number, number>();
+  for (const link of data.links) {
+    valueByNode.set(link.source, Math.max(valueByNode.get(link.source) ?? 0, link.value));
+    valueByNode.set(link.target, Math.max(valueByNode.get(link.target) ?? 0, link.value));
+  }
+
+  const xByRole = { source: 90, income: 310, cash: 510, hub: 700, terminal: 970 };
+  const nodeWidth = 16;
+  const nodeHeight = (value: number) => Math.max(14, Math.min(120, 14 + (value / maxValue) * 95));
+  const nodes = data.nodes.map((node, id): CashflowLayoutNode => ({
+    id,
+    name: node.name,
+    type: node.type,
+    color: node.color,
+    value: valueByNode.get(id) ?? 0,
+    x: xByRole.terminal,
+    y: height / 2,
+    width: nodeWidth,
+    height: nodeHeight(valueByNode.get(id) ?? 0),
+    labelSide: "right",
+  }));
+
+  const byName = new Map(nodes.map((node) => [node.name, node]));
+  const incomeHub = byName.get("Income");
+  const availableHub = byName.get("Available cash");
+  const debtHub = byName.get("Debt payments");
+  const investmentHub = byName.get("Investments");
+  const expenseHub = byName.get("Expenses");
+  const savingsHub = byName.get("Retained savings");
+
+  const setNode = (node: CashflowLayoutNode | undefined, x: number, y: number, labelSide: "left" | "right" = "right") => {
+    if (!node) return;
+    node.x = x;
+    node.y = y - node.height / 2;
+    node.labelSide = labelSide;
+  };
+
+  setNode(incomeHub, xByRole.income, height * 0.5);
+  setNode(availableHub, xByRole.cash, height * 0.5);
+
+  const sourceNodes = data.links
+    .filter((link) => incomeHub && link.target === incomeHub.id)
+    .map((link) => nodes[link.source]);
+  distributeNodes(sourceNodes, height * 0.34, Math.max(44, Math.min(72, height / Math.max(sourceNodes.length + 1, 1))), xByRole.source, "right");
+
+  const terminalGroups = [
+    { hub: debtHub, parent: "Debt payments" },
+    { hub: investmentHub, parent: "Investments" },
+    { hub: expenseHub, parent: "Expenses" },
+  ];
+  let cursor = 72;
+  if (savingsHub) {
+    setNode(savingsHub, xByRole.terminal, cursor + savingsHub.height / 2, "right");
+    cursor += Math.max(70, savingsHub.height + 34);
+  }
+  for (const group of terminalGroups) {
+    const children = data.links.filter((link) => group.hub && link.source === group.hub.id).map((link) => nodes[link.target]);
+    if (children.length === 0 && group.hub !== savingsHub) continue;
+    const groupHeight = Math.max(58, children.length * 50);
+    const groupCenter = cursor + groupHeight / 2;
+    setNode(group.hub, xByRole.hub, groupCenter);
+    distributeNodes(children, groupCenter, 50, xByRole.terminal, "right");
+    cursor += groupHeight + 34;
+  }
+
+  const links: CashflowLayoutLink[] = data.links.map((link, index) => {
+    const source = nodes[link.source];
+    const target = nodes[link.target];
+    return {
+      id: `${link.source}-${link.target}-${index}`,
+      source,
+      target,
+      sourceName: source.name,
+      targetName: target.name,
+      value: link.value,
+      color: link.color,
+      width: Math.max(2, Math.min(42, 2 + (link.value / maxValue) * 38)),
+    };
+  });
+
+  return { width, height, nodes, links };
+}
+
+function distributeNodes(nodes: CashflowLayoutNode[], center: number, gap: number, x: number, labelSide: "left" | "right") {
+  const start = center - ((nodes.length - 1) * gap) / 2;
+  nodes.forEach((node, index) => {
+    node.x = x;
+    node.y = start + index * gap - node.height / 2;
+    node.labelSide = labelSide;
+  });
+}
+
+function cashflowPath(link: CashflowLayoutLink) {
+  const startX = link.source.x + link.source.width;
+  const startY = link.source.y + link.source.height / 2;
+  const endX = link.target.x;
+  const endY = link.target.y + link.target.height / 2;
+  const curve = Math.max(80, (endX - startX) * 0.5);
+  return `M ${startX} ${startY} C ${startX + curve} ${startY}, ${endX - curve} ${endY}, ${endX} ${endY}`;
 }
 
 

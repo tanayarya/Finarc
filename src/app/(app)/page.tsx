@@ -12,6 +12,7 @@ import {
   Wallet,
   AlertTriangle,
   CalendarClock,
+  X,
 } from "lucide-react";
 import {
   Card,
@@ -99,7 +100,7 @@ export default function DashboardPage() {
           </div>
 
           {data.maturedHoldings.length > 0 && (
-            <MaturityReviewCard holdings={data.maturedHoldings} />
+            <MaturityReviewCard holdings={data.maturedHoldings} onDone={() => mutate()} />
           )}
 
           {data.savingsInterestReviews.length > 0 && (
@@ -251,9 +252,21 @@ function BondInterestReviewCard({
       setSaving(false);
     }
   };
+  const dismiss = async () => {
+    try {
+      await postJson("/api/dashboard/reviews/dismiss", { marker: primary.dismissMarker });
+      toast.success("Hidden for this month");
+      onDone();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to hide review");
+    }
+  };
 
   return (
-    <Card className="border-sky-500/30 bg-sky-500/5">
+    <Card className="relative border-sky-500/30 bg-sky-500/5">
+      <Button variant="ghost" size="icon" className="absolute right-2 top-2 h-7 w-7" onClick={dismiss} aria-label="Hide bond interest review">
+        <X className="h-4 w-4" />
+      </Button>
       <CardContent className="flex flex-col gap-3 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex gap-3">
           <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-sky-500/15 text-sky-700 dark:text-sky-300">
@@ -322,9 +335,21 @@ function SavingsInterestReviewCard({
       setSaving(false);
     }
   };
+  const dismiss = async () => {
+    try {
+      await postJson("/api/dashboard/reviews/dismiss", { marker: primary.dismissMarker });
+      toast.success("Hidden for this month");
+      onDone();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to hide review");
+    }
+  };
 
   return (
-    <Card className="border-emerald-500/30 bg-emerald-500/5">
+    <Card className="relative border-emerald-500/30 bg-emerald-500/5">
+      <Button variant="ghost" size="icon" className="absolute right-2 top-2 h-7 w-7" onClick={dismiss} aria-label="Hide savings interest review">
+        <X className="h-4 w-4" />
+      </Button>
       <CardContent className="flex flex-col gap-3 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex gap-3">
           <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
@@ -528,15 +553,29 @@ function CreditObligationsCard({
 
 function MaturityReviewCard({
   holdings,
+  onDone,
 }: {
   holdings: DashboardData["maturedHoldings"];
+  onDone: () => void;
 }) {
   const { formatCurrency } = useCurrency();
   const primary = holdings[0];
   const extraCount = holdings.length - 1;
+  const dismiss = async () => {
+    try {
+      await postJson("/api/dashboard/reviews/dismiss", { marker: primary.dismissMarker });
+      toast.success("Hidden for this month");
+      onDone();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to hide review");
+    }
+  };
 
   return (
-    <Card className="border-amber-500/30 bg-amber-500/5">
+    <Card className="relative border-amber-500/30 bg-amber-500/5">
+      <Button variant="ghost" size="icon" className="absolute right-2 top-2 h-7 w-7" onClick={dismiss} aria-label="Hide maturity review">
+        <X className="h-4 w-4" />
+      </Button>
       <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex gap-3">
           <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300">

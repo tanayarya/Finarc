@@ -15,6 +15,7 @@ import { getPortfolioSummary } from "@/lib/services/investments";
 import { runAllNotifications } from "@/lib/services/notifications";
 import { pendingSavingsInterestReviews } from "@/lib/services/savings-interest";
 import { pendingBondInterestReviews } from "@/lib/services/bond-interest";
+import { dashboardReviewDismissMarker, getDismissedDashboardReviewMarkers } from "@/lib/services/dashboard-review-dismissals";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { ZERO } from "@/lib/money";
@@ -52,6 +53,7 @@ export async function GET(req: NextRequest) {
       upcoming,
       savingsInterestReviews,
       bondInterestReviews,
+      dismissedReviewMarkers,
     ] = await Promise.all([
       computeNetWorth(),
       totalsForRange(range),
@@ -68,6 +70,7 @@ export async function GET(req: NextRequest) {
       upcomingRecurring(new Date(), addDays(new Date(), 14)),
       pendingSavingsInterestReviews(),
       pendingBondInterestReviews(),
+      getDismissedDashboardReviewMarkers(),
     ]);
 
     const creditAccounts = await prisma.account.findMany({
@@ -82,7 +85,7 @@ export async function GET(req: NextRequest) {
       totalPnlPercent: 0,
       holdings: [],
     }));
-    const maturedHoldings = await prisma.holding.findMany({
+    const maturedHoldingsRaw = await prisma.holding.findMany({
       where: {
         archived: false,
         maturityDate: { lte: endOfDay(new Date()) },
@@ -95,6 +98,18 @@ export async function GET(req: NextRequest) {
       orderBy: { maturityDate: "asc" },
       take: 5,
       include: { account: true },
+    });
+    const maturedHoldings = maturedHoldingsRaw.filter((h) => {
+      const marker = dashboardReviewDismissMarker("maturity", h.id, new Date());
+      return !dismissedReviewMarkers.has(marker);
+    });
+    const visibleSavingsInterestReviews = savingsInterestReviews.filter((r) => {
+      const marker = dashboardReviewDismissMarker("savingsInterest", `${r.accountId}:${r.periodStart.toISOString().slice(0, 10)}:${r.periodEnd.toISOString().slice(0, 10)}`, new Date());
+      return !dismissedReviewMarkers.has(marker);
+    });
+    const visibleBondInterestReviews = bondInterestReviews.filter((r) => {
+      const marker = dashboardReviewDismissMarker("bondInterest", `${r.holdingId}:${r.periodStart.toISOString().slice(0, 10)}:${r.periodEnd.toISOString().slice(0, 10)}`, new Date());
+      return !dismissedReviewMarkers.has(marker);
     });
     const creditObligations = creditAccounts
       .map((a) => {
@@ -182,9 +197,10 @@ export async function GET(req: NextRequest) {
           maturityDate: h.maturityDate?.toISOString() ?? null,
           principal,
           interestFreq: h.interestFreq,
+          dismissMarker: dashboardReviewDismissMarker("maturity", h.id, new Date()),
         };
       }),
-      savingsInterestReviews: savingsInterestReviews.map((r) => ({
+      savingsInterestReviews: visibleSavingsInterestReviews.map((r) => ({
         accountId: r.accountId,
         accountName: r.accountName,
         frequency: r.frequency,
@@ -193,8 +209,9 @@ export async function GET(req: NextRequest) {
         periodEnd: r.periodEnd.toISOString(),
         dueDate: r.dueDate.toISOString(),
         amount: r.amount.toFixed(2),
+        dismissMarker: dashboardReviewDismissMarker("savingsInterest", `${r.accountId}:${r.periodStart.toISOString().slice(0, 10)}:${r.periodEnd.toISOString().slice(0, 10)}`, new Date()),
       })),
-      bondInterestReviews: bondInterestReviews.map((r) => ({
+      bondInterestReviews: visibleBondInterestReviews.map((r) => ({
         holdingId: r.holdingId,
         name: r.name,
         accountId: r.accountId,
@@ -208,6 +225,7 @@ export async function GET(req: NextRequest) {
         grossInterest: r.grossInterest.toFixed(2),
         tdsAmount: r.tdsAmount.toFixed(2),
         netAmount: r.netAmount.toFixed(2),
+        dismissMarker: dashboardReviewDismissMarker("bondInterest", `${r.holdingId}:${r.periodStart.toISOString().slice(0, 10)}:${r.periodEnd.toISOString().slice(0, 10)}`, new Date()),
       })),
     });
   } catch (e) {

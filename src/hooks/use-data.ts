@@ -145,6 +145,7 @@ export interface DashboardData {
     maturityDate: string | null;
     principal: number;
     interestFreq: string | null;
+    dismissMarker: string;
   }>;
   savingsInterestReviews: Array<{
     accountId: string;
@@ -155,6 +156,7 @@ export interface DashboardData {
     periodEnd: string;
     dueDate: string;
     amount: string;
+    dismissMarker: string;
   }>;
   bondInterestReviews: Array<{
     holdingId: string;
@@ -170,6 +172,7 @@ export interface DashboardData {
     grossInterest: string;
     tdsAmount: string;
     netAmount: string;
+    dismissMarker: string;
   }>;
 }
 
