@@ -263,10 +263,7 @@ function BondInterestReviewCard({
   };
 
   return (
-    <Card className="relative border-sky-500/30 bg-sky-500/5">
-      <Button variant="ghost" size="icon" className="absolute right-2 top-2 h-7 w-7" onClick={dismiss} aria-label="Hide bond interest review">
-        <X className="h-4 w-4" />
-      </Button>
+    <Card className="border-sky-500/30 bg-sky-500/5">
       <CardContent className="flex flex-col gap-3 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex gap-3">
           <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-sky-500/15 text-sky-700 dark:text-sky-300">
@@ -291,6 +288,9 @@ function BondInterestReviewCard({
           />
           <Button size="sm" onClick={approve} disabled={saving}>
             {saving ? "Saving..." : `Approve ${formatCurrency(netAmount)}`}
+          </Button>
+          <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={dismiss} aria-label="Hide bond interest review">
+            <X className="h-4 w-4" />
           </Button>
         </div>
       </CardContent>
@@ -346,10 +346,7 @@ function SavingsInterestReviewCard({
   };
 
   return (
-    <Card className="relative border-emerald-500/30 bg-emerald-500/5">
-      <Button variant="ghost" size="icon" className="absolute right-2 top-2 h-7 w-7" onClick={dismiss} aria-label="Hide savings interest review">
-        <X className="h-4 w-4" />
-      </Button>
+    <Card className="border-emerald-500/30 bg-emerald-500/5">
       <CardContent className="flex flex-col gap-3 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex gap-3">
           <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
@@ -380,6 +377,9 @@ function SavingsInterestReviewCard({
           </div>
           <Button size="sm" onClick={approve} disabled={saving || !isValidAmount}>
             {saving ? "Saving..." : isValidAmount ? `Approve ${formatCurrency(normalizedAmount)}` : "Approve"}
+          </Button>
+          <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={dismiss} aria-label="Hide savings interest review">
+            <X className="h-4 w-4" />
           </Button>
         </div>
       </CardContent>
@@ -572,10 +572,7 @@ function MaturityReviewCard({
   };
 
   return (
-    <Card className="relative border-amber-500/30 bg-amber-500/5">
-      <Button variant="ghost" size="icon" className="absolute right-2 top-2 h-7 w-7" onClick={dismiss} aria-label="Hide maturity review">
-        <X className="h-4 w-4" />
-      </Button>
+    <Card className="border-amber-500/30 bg-amber-500/5">
       <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex gap-3">
           <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300">
@@ -591,9 +588,14 @@ function MaturityReviewCard({
             </p>
           </div>
         </div>
-        <Button asChild size="sm" variant="outline" className="sm:self-center">
-          <Link href="/investments">Review</Link>
-        </Button>
+        <div className="flex gap-2 sm:self-center">
+          <Button asChild size="sm" variant="outline">
+            <Link href="/investments">Review</Link>
+          </Button>
+          <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={dismiss} aria-label="Hide maturity review">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
