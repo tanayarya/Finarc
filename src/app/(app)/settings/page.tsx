@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { useTheme } from "next-themes";
-import { Download, Upload, Moon, Sun, Monitor, Database, Globe, Trash2, Send, ArrowUpRight, Newspaper } from "lucide-react";
+import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
+import { Download, Upload, Moon, Sun, Monitor, Database, Globe, Trash2, Send, ArrowUpRight, Newspaper, ShieldCheck, Smartphone, KeyRound, Copy, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import useSWR, { mutate } from "swr";
 
@@ -119,7 +120,7 @@ export default function SettingsPage() {
         <TabsList>
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
           <TabsTrigger value="currency">Currency</TabsTrigger>
-          <TabsTrigger value="preferences">Preferences</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="charges">Trading Charges</TabsTrigger>
           <TabsTrigger value="telegram">Notifications</TabsTrigger>
           <TabsTrigger value="ai">AI Assistant</TabsTrigger>
@@ -217,10 +218,8 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="preferences">
-          <div className="space-y-4">
-            <PinResetCard />
-          </div>
+        <TabsContent value="security">
+          <SecuritySettings />
         </TabsContent>
 
         <TabsContent value="charges">
@@ -283,6 +282,255 @@ function PrefRow({ title, description, children }: { title: string; description:
       <div className="space-y-0.5"><Label className="text-sm">{title}</Label><p className="text-xs text-muted-foreground">{description}</p></div>
       <div className="pt-0.5">{children}</div>
     </div>
+  );
+}
+
+interface AuthConfig {
+  pinEnabled: boolean;
+  totpEnabled: boolean;
+  webAuthnEnabled: boolean;
+  webAuthnCredentials: Array<{ id: string; name: string; createdAt: string; lastUsedAt?: string }>;
+}
+
+function SecuritySettings() {
+  return (
+    <div className="space-y-4">
+      <PinResetCard />
+      <AuthenticatorAppCard />
+      <SecurityKeysCard />
+    </div>
+  );
+}
+
+function AuthenticatorAppCard() {
+  const { data: config, mutate: mutateConfig } = useSWR<AuthConfig>("/api/auth/config");
+  const [setup, setSetup] = React.useState<{ secret: string; otpauthUrl: string } | null>(null);
+  const [code, setCode] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+
+  const onSetup = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/totp/setup", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to start setup");
+      const body = await res.json();
+      setSetup(body.data);
+      toast.success("Authenticator setup started");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to start setup");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onEnable = async () => {
+    if (code.length !== 6) {
+      toast.error("Enter the 6-digit code");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/totp/enable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error?.message ?? "Failed to enable authenticator app");
+      }
+      toast.success("Authenticator app enabled");
+      setSetup(null);
+      setCode("");
+      mutateConfig();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to enable authenticator app");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onDisable = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/totp/disable", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to disable authenticator app");
+      toast.success("Authenticator app disabled");
+      mutateConfig();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to disable authenticator app");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onCopy = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success("Copied");
+    } catch {
+      toast.error("Copy failed");
+    }
+  };
+
+  const enabled = Boolean(config?.totpEnabled);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Smartphone className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm">Authenticator app</CardTitle>
+          </div>
+          <Badge variant={enabled ? "success" : "muted"}>{enabled ? "Enabled" : "Optional"}</Badge>
+        </div>
+        <CardDescription>Use a 6-digit code from Google Authenticator, 1Password, Authy, or any TOTP app.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!enabled && !setup && (
+          <Button onClick={onSetup} disabled={loading} className="gap-2">
+            <Plus className="h-4 w-4" /> Set up authenticator
+          </Button>
+        )}
+
+        {!enabled && setup && (
+          <div className="space-y-3 rounded-md border p-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Secret key</Label>
+              <div className="flex gap-2">
+                <Input readOnly value={setup.secret} className="font-mono text-xs" />
+                <Button type="button" variant="outline" size="icon" onClick={() => onCopy(setup.secret)}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">Add this key manually in your authenticator app, then enter the current code below.</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <div className="space-y-1">
+                <Label className="text-xs">Verification code</Label>
+                <Input
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="123456"
+                />
+              </div>
+              <Button onClick={onEnable} disabled={loading || code.length !== 6}>Enable</Button>
+            </div>
+          </div>
+        )}
+
+        {enabled && (
+          <Button variant="outline" onClick={onDisable} disabled={loading} className="gap-2">
+            <X className="h-4 w-4" /> Disable authenticator
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SecurityKeysCard() {
+  const { data: config, mutate: mutateConfig } = useSWR<AuthConfig>("/api/auth/config");
+  const [name, setName] = React.useState("YubiKey");
+  const [loading, setLoading] = React.useState(false);
+  const [supported, setSupported] = React.useState(false);
+
+  React.useEffect(() => {
+    setSupported(browserSupportsWebAuthn());
+  }, []);
+
+  const onAdd = async () => {
+    if (!supported) {
+      toast.error("This browser does not support security keys");
+      return;
+    }
+    setLoading(true);
+    try {
+      const optionsRes = await fetch("/api/auth/webauthn/register-options", { method: "POST" });
+      if (!optionsRes.ok) throw new Error("Failed to start security key setup");
+      const optionsBody = await optionsRes.json();
+      const response = await startRegistration({ optionsJSON: optionsBody.data });
+      const verifyRes = await fetch("/api/auth/webauthn/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, response }),
+      });
+      if (!verifyRes.ok) {
+        const err = await verifyRes.json().catch(() => ({}));
+        throw new Error(err?.error?.message ?? "Failed to register security key");
+      }
+      toast.success("Security key registered");
+      setName("YubiKey");
+      mutateConfig();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to register security key");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onDelete = async (id: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/auth/webauthn/credentials/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to remove security key");
+      toast.success("Security key removed");
+      mutateConfig();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to remove security key");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const credentials = config?.webAuthnCredentials ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm">Security keys and passkeys</CardTitle>
+          </div>
+          <Badge variant={credentials.length ? "success" : "muted"}>{credentials.length ? `${credentials.length} added` : "Optional"}</Badge>
+        </div>
+        <CardDescription>Add a hardware key like YubiKey or a platform passkey supported by your browser.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,260px)_auto] sm:items-end">
+          <div className="space-y-1">
+            <Label className="text-xs">Key name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="YubiKey" />
+          </div>
+          <Button onClick={onAdd} disabled={loading || !supported} className="gap-2">
+            <ShieldCheck className="h-4 w-4" /> Add key
+          </Button>
+        </div>
+        {!supported && <p className="text-xs text-muted-foreground">Use a modern HTTPS browser, localhost, or your Vercel/custom domain to add a security key.</p>}
+        {credentials.length > 0 && (
+          <div className="space-y-2">
+            {credentials.map((credential) => (
+              <div key={credential.id} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium">{credential.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Added {new Date(credential.createdAt).toLocaleDateString()}
+                    {credential.lastUsedAt ? ` · Last used ${new Date(credential.lastUsedAt).toLocaleDateString()}` : ""}
+                  </p>
+                </div>
+                <Button type="button" variant="ghost" size="icon" onClick={() => onDelete(credential.id)} disabled={loading}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
