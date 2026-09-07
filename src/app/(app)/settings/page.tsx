@@ -286,6 +286,7 @@ function PrefRow({ title, description, children }: { title: string; description:
 }
 
 interface AuthConfig {
+  authPrimaryMethod: "pin" | "totp";
   pinEnabled: boolean;
   totpEnabled: boolean;
   webAuthnEnabled: boolean;
@@ -295,10 +296,63 @@ interface AuthConfig {
 function SecuritySettings() {
   return (
     <div className="space-y-4">
+      <UnlockMethodCard />
       <PinResetCard />
       <AuthenticatorAppCard />
       <SecurityKeysCard />
     </div>
+  );
+}
+
+function UnlockMethodCard() {
+  const { data: config, mutate: mutateConfig } = useSWR<AuthConfig>("/api/auth/config");
+  const [saving, setSaving] = React.useState(false);
+  const method = config?.authPrimaryMethod ?? "pin";
+
+  const onChange = async (next: "pin" | "totp") => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/auth/method", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ method: next }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error?.message ?? "Failed to update unlock method");
+      }
+      toast.success(next === "totp" ? "Authenticator set as unlock method" : "PIN set as unlock method");
+      mutateConfig();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to update unlock method");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-sm">Unlock method</CardTitle>
+        </div>
+        <CardDescription>Choose whether Finarc asks for your 6-digit PIN or authenticator code. Security keys stay available as an optional alternate unlock.</CardDescription>
+      </CardHeader>
+      <CardContent className="max-w-sm space-y-2">
+        <Label className="text-xs">Primary unlock</Label>
+        <Select value={method} onValueChange={(value) => onChange(value as "pin" | "totp")} disabled={saving}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pin">6-digit PIN</SelectItem>
+            <SelectItem value="totp" disabled={!config?.totpEnabled}>Authenticator code</SelectItem>
+          </SelectContent>
+        </Select>
+        {!config?.totpEnabled && (
+          <p className="text-[10px] text-muted-foreground">Set up the authenticator app below before selecting it here.</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

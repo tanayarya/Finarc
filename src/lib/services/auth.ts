@@ -15,11 +15,14 @@ export interface StoredWebAuthnCredential {
 }
 
 export interface AuthConfig {
+  authPrimaryMethod: AuthPrimaryMethod;
   pinEnabled: boolean;
   totpEnabled: boolean;
   webAuthnEnabled: boolean;
   webAuthnCredentials: Array<{ id: string; name: string; createdAt: string; lastUsedAt?: string }>;
 }
+
+export type AuthPrimaryMethod = "pin" | "totp";
 
 export async function getSetting(key: string) {
   return (await prisma.appSetting.findUnique({ where: { key } }))?.value;
@@ -48,17 +51,28 @@ export async function setPin(pin: string) {
 }
 
 export async function getAuthConfig(): Promise<AuthConfig> {
-  const [totpSecret, credentials] = await Promise.all([
+  const [totpSecret, credentials, savedPrimaryMethod] = await Promise.all([
     getSetting("authTotpSecret"),
     getWebAuthnCredentials(),
+    getSetting("authPrimaryMethod"),
   ]);
+  const totpEnabled = Boolean(totpSecret);
+  const authPrimaryMethod: AuthPrimaryMethod = savedPrimaryMethod === "totp" && totpEnabled ? "totp" : "pin";
 
   return {
+    authPrimaryMethod,
     pinEnabled: true,
-    totpEnabled: Boolean(totpSecret),
+    totpEnabled,
     webAuthnEnabled: credentials.length > 0,
     webAuthnCredentials: credentials.map(({ id, name, createdAt, lastUsedAt }) => ({ id, name, createdAt, lastUsedAt })),
   };
+}
+
+export async function setAuthPrimaryMethod(method: AuthPrimaryMethod) {
+  if (method === "totp" && !(await getSetting("authTotpSecret"))) {
+    throw new Error("Set up authenticator app before using it as the unlock method");
+  }
+  await setSetting("authPrimaryMethod", method);
 }
 
 export function generateTotpSecret() {

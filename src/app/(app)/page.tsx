@@ -278,9 +278,9 @@ function BondInterestReviewCard({
             </p>
           </div>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="grid gap-2 sm:grid-cols-[9rem_auto_auto] sm:items-center">
           <Input
-            className="h-9 tabular sm:w-36"
+            className="h-9 tabular"
             inputMode="decimal"
             value={netAmount}
             onChange={(e) => setNetAmount(e.target.value)}
@@ -289,7 +289,7 @@ function BondInterestReviewCard({
           <Button size="sm" onClick={approve} disabled={saving}>
             {saving ? "Saving..." : `Approve ${formatCurrency(netAmount)}`}
           </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={dismiss} aria-label="Hide bond interest review">
+          <Button variant="ghost" size="icon" className="h-9 w-9 justify-self-start sm:justify-self-auto" onClick={dismiss} aria-label="Hide bond interest review">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -362,8 +362,8 @@ function SavingsInterestReviewCard({
             </p>
           </div>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative sm:w-36">
+        <div className="grid gap-2 sm:grid-cols-[9rem_auto_auto] sm:items-center">
+          <div className="relative">
             <Input
               className="h-9 tabular"
               inputMode="decimal"
@@ -378,7 +378,7 @@ function SavingsInterestReviewCard({
           <Button size="sm" onClick={approve} disabled={saving || !isValidAmount}>
             {saving ? "Saving..." : isValidAmount ? `Approve ${formatCurrency(normalizedAmount)}` : "Approve"}
           </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={dismiss} aria-label="Hide savings interest review">
+          <Button variant="ghost" size="icon" className="h-9 w-9 justify-self-start sm:justify-self-auto" onClick={dismiss} aria-label="Hide savings interest review">
             <X className="h-4 w-4" />
           </Button>
         </div>
