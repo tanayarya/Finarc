@@ -55,8 +55,8 @@ export function rangeForKind(
       };
     case "CUSTOM":
       return {
-        from: custom?.from ?? startOfDay(subDays(now, 30)),
-        to: custom?.to ?? endOfDay(now),
+        from: custom?.from ? startOfDay(custom.from) : startOfDay(subDays(now, 30)),
+        to: custom?.to ? endOfDay(custom.to) : endOfDay(now),
         kind,
         label: "Custom range",
       };

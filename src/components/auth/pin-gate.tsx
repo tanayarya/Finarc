@@ -32,19 +32,28 @@ export function PinGate({ children }: Props) {
   const useTotp = config.authPrimaryMethod === "totp" && config.totpEnabled;
 
   React.useEffect(() => {
-    const session = sessionStorage.getItem(SESSION_KEY);
-    if (session === "true") {
-      setAuthenticated(true);
-      setChecking(false);
-      return;
+    async function checkSession() {
+      try {
+        const sessionRes = await fetch("/api/auth/session");
+        const sessionBody = await sessionRes.json().catch(() => ({}));
+        if (sessionBody?.data?.authenticated) {
+          sessionStorage.setItem(SESSION_KEY, "true");
+          setAuthenticated(true);
+          return;
+        }
+        sessionStorage.removeItem(SESSION_KEY);
+
+        const configRes = await fetch("/api/auth/config");
+        const configBody = await configRes.json().catch(() => ({}));
+        if (configBody?.data) setConfig(configBody.data);
+      } catch {
+        sessionStorage.removeItem(SESSION_KEY);
+      } finally {
+        setChecking(false);
+      }
     }
-    fetch("/api/auth/config")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d?.data) setConfig(d.data);
-      })
-      .catch(() => {})
-      .finally(() => setChecking(false));
+
+    void checkSession();
   }, []);
 
   const markAuthenticated = React.useCallback(() => {

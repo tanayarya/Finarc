@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { hasValidTelegramWebhookSecret } from "@/lib/machine-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,10 @@ const APP_TIME_ZONE = "Asia/Kolkata";
  */
 export async function POST(req: NextRequest) {
   try {
+    if (!hasValidTelegramWebhookSecret(req)) {
+      return new Response("OK", { status: 200 });
+    }
+
     const body = await req.json();
     const message = body?.message;
     if (!message?.text || !message?.chat?.id) {

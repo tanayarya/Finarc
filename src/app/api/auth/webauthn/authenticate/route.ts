@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { verifyAuthenticationResponse } from "@simplewebauthn/server";
 import { ok, fail, handleError } from "@/lib/api";
+import { AUTH_SESSION_COOKIE, authCookieOptions, createAuthSessionCookie } from "@/lib/auth-session";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import {
   deleteSetting,
   getSetting,
@@ -14,6 +16,9 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
+    const limited = checkRateLimit(`auth:webauthn:${getClientIp(req)}`, { limit: 12, windowMs: 5 * 60 * 1000 });
+    if (!limited.ok) return fail("Too many attempts. Try again in a few minutes.", 429);
+
     const response = await req.json();
     const expectedChallenge = await getSetting("authWebAuthnAuthenticationChallenge");
     if (!expectedChallenge) return fail("Start security key verification first", 400);
@@ -48,7 +53,9 @@ export async function POST(req: NextRequest) {
     );
     await deleteSetting("authWebAuthnAuthenticationChallenge");
 
-    return ok({ authenticated: true, method: "webauthn" });
+    const res = ok({ authenticated: true, method: "webauthn" });
+    res.cookies.set(AUTH_SESSION_COOKIE, await createAuthSessionCookie("webauthn"), authCookieOptions(req));
+    return res;
   } catch (e) {
     return handleError(e);
   }

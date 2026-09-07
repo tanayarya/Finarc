@@ -93,7 +93,11 @@ export function Sidebar() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
-              onClick={() => { sessionStorage.removeItem("finarc_auth"); window.location.reload(); }}
+              onClick={async () => {
+                await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+                sessionStorage.removeItem("finarc_auth");
+                window.location.reload();
+              }}
               className={cn(
                 "flex w-full items-center rounded-md text-sm font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors",
                 collapsed ? "justify-center p-2.5" : "gap-2 px-3 py-2"
