@@ -17,7 +17,7 @@ export async function POST(req: Request) {
         transports: credential.transports,
       })),
       timeout: 60_000,
-      userVerification: "preferred",
+      userVerification: "discouraged",
     });
 
     await setSetting("authWebAuthnAuthenticationChallenge", options.challenge);

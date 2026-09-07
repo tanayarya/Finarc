@@ -193,7 +193,7 @@ export function PinGate({ children }: Props) {
           {config.webAuthnEnabled && (
             <Button type="button" variant="outline" className="w-full gap-2" onClick={onSecurityKey} disabled={loading}>
               <KeyRound className="h-4 w-4" />
-              Use security key
+              Touch security key
             </Button>
           )}
 

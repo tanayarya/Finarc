@@ -21,8 +21,8 @@ export async function POST(req: Request) {
         transports: credential.transports,
       })),
       authenticatorSelection: {
-        residentKey: "preferred",
-        userVerification: "preferred",
+        residentKey: "discouraged",
+        userVerification: "discouraged",
       },
       preferredAuthenticatorType: "securityKey",
     });
