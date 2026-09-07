@@ -1,8 +1,6 @@
 import {
   startOfDay,
   endOfDay,
-  startOfWeek,
-  endOfWeek,
   startOfMonth,
   endOfMonth,
   startOfYear,
@@ -34,10 +32,10 @@ export function rangeForKind(
   switch (kind) {
     case "WEEK":
       return {
-        from: startOfWeek(now, { weekStartsOn: 1 }),
-        to: endOfWeek(now, { weekStartsOn: 1 }),
+        from: startOfDay(subDays(now, 6)),
+        to: endOfDay(now),
         kind,
-        label: "This week",
+        label: "Last 7 days",
       };
     case "MONTH":
       return {
