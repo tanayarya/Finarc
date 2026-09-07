@@ -1,7 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { add, sub, toMoney, ZERO, type Money } from "@/lib/money";
-import { eachDayOfInterval, eachMonthOfInterval, format } from "date-fns";
-import type { DateRange } from "./dates";
+import {
+  eachFinanceDay,
+  eachFinanceMonth,
+  financeDayKey,
+  financeDayLabel,
+  financeMonthKey,
+  financeMonthLabel,
+  type DateRange,
+} from "./dates";
 
 export interface SeriesPoint {
   date: string; // ISO date or month label
@@ -56,14 +63,14 @@ export async function incomeExpenseSeries(range: DateRange): Promise<SeriesPoint
   const useDaily = range.kind === "WEEK" || range.kind === "MONTH" || (range.kind === "CUSTOM" && diffDays(range.from, range.to) <= 45);
 
   if (useDaily) {
-    const days = eachDayOfInterval({ start: range.from, end: range.to });
-    const byDay = sumTransactionsByKey(txns, "yyyy-MM-dd");
+    const days = eachFinanceDay(range.from, range.to);
+    const byDay = sumTransactionsByKey(txns, financeDayKey);
     return days.map((d) => {
-      const point = byDay.get(format(d, "yyyy-MM-dd")) ?? { income: 0, expense: 0 };
+      const point = byDay.get(financeDayKey(d)) ?? { income: 0, expense: 0 };
       const income = point.income;
       const expense = point.expense;
       return {
-        date: format(d, "MMM d"),
+        date: financeDayLabel(d),
         income: round(income),
         expense: round(expense),
         net: round(income - expense),
@@ -71,14 +78,14 @@ export async function incomeExpenseSeries(range: DateRange): Promise<SeriesPoint
     });
   }
 
-  const months = eachMonthOfInterval({ start: range.from, end: range.to });
-  const byMonth = sumTransactionsByKey(txns, "yyyy-MM");
+  const months = eachFinanceMonth(range.from, range.to);
+  const byMonth = sumTransactionsByKey(txns, financeMonthKey);
   return months.map((m) => {
-    const point = byMonth.get(format(m, "yyyy-MM")) ?? { income: 0, expense: 0 };
+    const point = byMonth.get(financeMonthKey(m)) ?? { income: 0, expense: 0 };
     const income = point.income;
     const expense = point.expense;
     return {
-      date: format(m, "MMM yyyy"),
+      date: financeMonthLabel(m),
       income: round(income),
       expense: round(expense),
       net: round(income - expense),
@@ -94,11 +101,11 @@ function sumTransactionsByKey(
     account: { type: string } | null;
     trade: { id: string } | null;
   }>,
-  pattern: string
+  getKey: (date: Date) => string
 ) {
   return txns.reduce<Map<string, { income: number; expense: number }>>((acc, t) => {
     if (t.trade) return acc;
-    const key = format(t.occurredAt, pattern);
+    const key = getKey(t.occurredAt);
     const point = acc.get(key) ?? { income: 0, expense: 0 };
     if (t.type === "INCOME" && t.account?.type !== "CREDIT") point.income += Number(t.amount);
     if (t.type === "EXPENSE") point.expense += Number(t.amount);
