@@ -1,16 +1,18 @@
 import { NextRequest } from "next/server";
 import { ok, handleError, fail } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { vaultEncryptionKeyId } from "@/lib/services/document-vault";
 
 export const dynamic = "force-dynamic";
 
 const BACKUP_FORMAT = "finarc.backup";
-const SUPPORTED_VERSIONS = [1, 2];
+const SUPPORTED_VERSIONS = [1, 2, 3];
 
 interface BackupPayload {
   format: string;
   version: number;
   exportedAt: string;
+  vaultEncryptionKeyId?: string;
   data: {
     accounts: Array<Record<string, unknown>>;
     categories: Array<Record<string, unknown>>;
@@ -21,6 +23,7 @@ interface BackupPayload {
     trades?: Array<Record<string, unknown>>;
     dues?: Array<Record<string, unknown>>;
     settings?: Array<Record<string, unknown>>;
+    vaultDocuments?: Array<Record<string, unknown>>;
   };
 }
 
@@ -32,9 +35,13 @@ export async function POST(req: NextRequest) {
     if (!body.version || !SUPPORTED_VERSIONS.includes(body.version))
       return fail("Unsupported backup version", 400);
     if (!body.data) return fail("Backup payload missing data", 400);
+    if ((body.data.vaultDocuments?.length ?? 0) > 0 && body.vaultEncryptionKeyId !== vaultEncryptionKeyId()) {
+      return fail("This vault backup was encrypted with a different document key. Use the same FINARC_DOCUMENT_SECRET before restoring it.", 400);
+    }
 
     await prisma.$transaction(async (tx) => {
       // Wipe in dependency order (most dependent first)
+      await tx.vaultDocument.deleteMany();
       await tx.trade.deleteMany();
       await tx.holding.deleteMany();
       await tx.due.deleteMany();
@@ -73,6 +80,9 @@ export async function POST(req: NextRequest) {
       for (const d of body.data!.dues ?? []) {
         await tx.due.create({ data: d as never });
       }
+      for (const document of body.data!.vaultDocuments ?? []) {
+        await tx.vaultDocument.create({ data: decodeVaultDocument(document) as never });
+      }
     }, { timeout: 120000 }); // 2 minute timeout for large imports
 
     const counts = {
@@ -84,10 +94,25 @@ export async function POST(req: NextRequest) {
       holdings: body.data!.holdings?.length ?? 0,
       trades: body.data!.trades?.length ?? 0,
       settings: body.data!.settings?.length ?? 0,
+      vaultDocuments: body.data!.vaultDocuments?.length ?? 0,
     };
 
     return ok({ imported: true, counts });
   } catch (e) {
     return handleError(e);
   }
+}
+
+function decodeVaultDocument(document: Record<string, unknown>) {
+  const decode = (field: "encryptedData" | "encryptionIv" | "encryptionTag") => {
+    const raw = document[field];
+    if (typeof raw !== "string" || !raw) throw new Error(`Invalid document backup field: ${field}`);
+    return Buffer.from(raw, "base64");
+  };
+  return {
+    ...document,
+    encryptedData: decode("encryptedData"),
+    encryptionIv: decode("encryptionIv"),
+    encryptionTag: decode("encryptionTag"),
+  };
 }

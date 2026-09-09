@@ -242,6 +242,32 @@ export const recurringUpdateSchema = z.object({
   skipDate: z.coerce.date().optional(),
 });
 
+export const vaultDocumentUpdateSchema = z.object({
+  title: z.string().trim().min(1).max(120).optional(),
+  type: z.enum([
+    "BANK_STATEMENT",
+    "FD_RECEIPT",
+    "BOND_DOCUMENT",
+    "INVESTMENT_STATEMENT",
+    "INSURANCE",
+    "LOAN_STATEMENT",
+    "TAX",
+    "CONTRACT_NOTE",
+    "INVOICE",
+    "OTHER",
+  ]).optional(),
+  notes: z.string().trim().max(1000).optional().nullable(),
+  accountId: z.string().optional().nullable(),
+  holdingId: z.string().optional().nullable(),
+  transactionId: z.string().optional().nullable(),
+  dueId: z.string().optional().nullable(),
+}).superRefine((data, ctx) => {
+  const links = [data.accountId, data.holdingId, data.transactionId, data.dueId].filter(Boolean);
+  if (links.length > 1) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Link a document to one record at a time" });
+  }
+});
+
 export const dateRangeSchema = z
   .object({
     kind: z.enum(["WEEK", "MONTH", "YEAR", "CUSTOM"]).default("MONTH"),

@@ -59,6 +59,19 @@ enum CategoryKind {
   EXPENSE
 }
 
+enum VaultDocumentType {
+  BANK_STATEMENT
+  FD_RECEIPT
+  BOND_DOCUMENT
+  INVESTMENT_STATEMENT
+  INSURANCE
+  LOAN_STATEMENT
+  TAX
+  CONTRACT_NOTE
+  INVOICE
+  OTHER
+}
+
 // ─── Models ────────────────────────────────────────────────────────────
 
 model Account {
@@ -95,6 +108,7 @@ model Account {
   recurringTransfers RecurringRule[] @relation("RecurringToAccount")
   holdings           Holding[]
   dues               Due[]
+  vaultDocuments     VaultDocument[] @relation("VaultDocumentAccount")
 
   @@index([type])
   @@index([archived])
@@ -145,6 +159,7 @@ model Transaction {
   taxDeductible   Boolean     @default(false)
 
   trade           Trade?
+  vaultDocuments  VaultDocument[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -277,6 +292,7 @@ model Holding {
   updatedAt       DateTime       @updatedAt
 
   trades          Trade[]
+  vaultDocuments  VaultDocument[]
 
   @@index([type])
   @@index([symbol])
@@ -331,6 +347,7 @@ model Due {
   dueDate        DateTime?
   accountId      String
   account        Account   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  vaultDocuments VaultDocument[]
   status         DueStatus @default(PENDING)
   settledAt      DateTime?
   notes          String?
@@ -340,4 +357,39 @@ model Due {
   @@index([status])
   @@index([type])
   @@index([dueDate])
+}
+
+// ─── Encrypted Document Vault ─────────────────────────────────────────
+
+model VaultDocument {
+  id               String            @id @default(cuid())
+  title            String
+  type             VaultDocumentType @default(OTHER)
+  originalFilename String
+  mimeType         String
+  byteSize         Int
+  checksum         String
+  encryptedData    Bytes
+  encryptionIv     Bytes
+  encryptionTag    Bytes
+  notes            String?
+
+  accountId        String?
+  account          Account?          @relation("VaultDocumentAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  holdingId        String?
+  holding          Holding?          @relation(fields: [holdingId], references: [id], onDelete: SetNull)
+  transactionId    String?
+  transaction      Transaction?      @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  dueId            String?
+  due              Due?              @relation(fields: [dueId], references: [id], onDelete: SetNull)
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([type])
+  @@index([accountId])
+  @@index([holdingId])
+  @@index([transactionId])
+  @@index([dueId])
+  @@index([createdAt])
 }

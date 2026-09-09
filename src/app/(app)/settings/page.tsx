@@ -72,7 +72,7 @@ export default function SettingsPage() {
   const handleClear = async () => {
     const ok = await confirm({
       title: "Clear all financial data?",
-      description: "This permanently deletes every account, transaction, budget, category, and recurring rule. Your settings (currency, theme) will be kept. This cannot be undone — consider exporting a backup first.",
+      description: "This permanently deletes every account, transaction, budget, category, recurring rule, and vault document. Your settings (currency, theme) will be kept. This cannot be undone — consider exporting a backup first.",
       confirmLabel: "Yes, delete everything",
       tone: "destructive",
     });
@@ -238,7 +238,7 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2"><Database className="h-4 w-4 text-muted-foreground" /><CardTitle className="text-sm">Backup &amp; restore</CardTitle></div>
-              <CardDescription>Export all of your data to a single JSON file. Imports must come from a Finarc-format file. Restoring replaces all current data.</CardDescription>
+              <CardDescription>Export all of your data, including encrypted vault documents, to a single JSON file. Imports must come from a Finarc-format file and replace all current data.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-3">
@@ -247,14 +247,14 @@ export default function SettingsPage() {
                 <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={importing} className="gap-2"><Upload className="h-4 w-4" />{importing ? "Restoring..." : "Restore backup"}</Button>
               </div>
               <input ref={fileRef} type="file" accept="application/json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImport(f); }} />
-              <p className="text-xs text-muted-foreground">Backups preserve relationships across accounts, transactions, budgets, and recurring rules.</p>
+              <p className="text-xs text-muted-foreground">Backups preserve relationships across accounts, transactions, budgets, recurring rules, and vault documents. Document restores require the same vault encryption secret.</p>
 
               <Separator className="my-4" />
 
               <div className="space-y-2">
                 <p className="text-sm font-medium text-destructive">Danger zone</p>
                 <p className="text-xs text-muted-foreground">
-                  Permanently delete all financial data — accounts, transactions, budgets, categories, and recurring rules. Your settings (currency, theme) will be preserved.
+                  Permanently delete all financial data — accounts, transactions, budgets, categories, recurring rules, and vault documents. Your settings (currency, theme) will be preserved.
                 </p>
                 <Button variant="destructive" className="gap-2" onClick={handleClear}>
                   <Trash2 className="h-4 w-4" /> Clear all data

@@ -7,6 +7,7 @@ export async function POST() {
   try {
     await prisma.$transaction(async (tx) => {
       // Delete in strict dependency order
+      await tx.vaultDocument.deleteMany();
       await tx.trade.deleteMany();
       await tx.holding.deleteMany();
       await tx.due.deleteMany();

@@ -5,6 +5,7 @@ import {
   PieChart,
   TrendingUp,
   FileBarChart,
+  FolderLock,
   Settings,
   Repeat,
   type LucideIcon,
@@ -23,6 +24,7 @@ export const navItems: NavItem[] = [
   { href: "/recurring", label: "Recurring", icon: Repeat },
   { href: "/budgets", label: "Budgets", icon: PieChart },
   { href: "/investments", label: "Investments", icon: TrendingUp },
+  { href: "/vault", label: "Vault", icon: FolderLock },
   { href: "/reports", label: "Reports", icon: FileBarChart },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -33,5 +35,5 @@ export const mobileNavItems: NavItem[] = [
   navItems[1], // Accounts
   navItems[2], // Transactions
   navItems[3], // Recurring
-  navItems[6], // Reports
+  navItems[7], // Reports
 ];

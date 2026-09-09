@@ -44,7 +44,7 @@ export function QuickAddButton() {
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)} className="gap-1.5">
+      <Button variant="secondary" size="sm" onClick={() => setOpen(true)} className="gap-1.5">
         <Plus className="h-4 w-4" />
         New transaction
       </Button>
