@@ -12,7 +12,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col h-screen overflow-hidden">
           <TopBar />
-          <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-24 pt-4 md:px-6 md:pb-8">
+          <main className="safe-area-content-bottom flex-1 overflow-y-auto overflow-x-hidden px-4 pb-24 pt-4 md:px-6 md:pb-8">
             <div className="mx-auto w-full max-w-7xl overflow-x-hidden">{children}</div>
           </main>
           <MobileBottomNav />

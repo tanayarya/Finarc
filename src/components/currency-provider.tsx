@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import useSWR from "swr";
-import { DEFAULT_CURRENCY } from "@/lib/currencies";
+import { DEFAULT_CURRENCY, isSupportedCurrency } from "@/lib/currencies";
 import {
   formatCurrency as formatCurrencyBase,
   formatCompactCurrency as formatCompactCurrencyBase,
@@ -21,6 +21,7 @@ interface CurrencyContextValue {
 }
 
 const CurrencyContext = React.createContext<CurrencyContextValue | null>(null);
+const CURRENCY_STORAGE_KEY = "finarc:currency";
 
 interface AppSettingsResponse {
   currency: string;
@@ -28,16 +29,39 @@ interface AppSettingsResponse {
 
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const { data, isLoading, mutate } = useSWR<AppSettingsResponse>("/api/settings");
-  const currency = data?.currency ?? DEFAULT_CURRENCY;
+  const [cachedCurrency, setCachedCurrency] = React.useState(DEFAULT_CURRENCY);
+
+  const persistCurrency = React.useCallback((next: string) => {
+    if (!isSupportedCurrency(next)) return;
+    setCachedCurrency(next);
+    window.localStorage.setItem(CURRENCY_STORAGE_KEY, next);
+  }, []);
+
+  React.useEffect(() => {
+    const stored = window.localStorage.getItem(CURRENCY_STORAGE_KEY);
+    if (stored && isSupportedCurrency(stored)) setCachedCurrency(stored);
+  }, []);
+
+  React.useEffect(() => {
+    if (data?.currency && isSupportedCurrency(data.currency)) {
+      persistCurrency(data.currency);
+    }
+  }, [data?.currency, persistCurrency]);
+
+  // Keep the last confirmed choice while the PWA reconnects to the settings API.
+  const currency = data?.currency && isSupportedCurrency(data.currency) ? data.currency : cachedCurrency;
 
   const setCurrency = React.useCallback(
     async (next: string) => {
-      // Optimistic update
-      await mutate({ currency: next }, { revalidate: false });
+      const currency = next.toUpperCase();
+      if (!isSupportedCurrency(currency)) throw new Error("Unsupported currency");
+
+      persistCurrency(currency);
+      await mutate({ currency }, { revalidate: false });
       const res = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currency: next }),
+        body: JSON.stringify({ currency }),
       });
       if (!res.ok) {
         await mutate();
@@ -46,7 +70,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
       }
       await mutate();
     },
-    [mutate]
+    [mutate, persistCurrency]
   );
 
   const value = React.useMemo<CurrencyContextValue>(

@@ -1,5 +1,5 @@
-const CACHE_NAME = "finarc-v1";
-const STATIC_ASSETS = ["/", "/logo.svg"];
+const CACHE_NAME = "finarc-v2";
+const STATIC_ASSETS = ["/logo.svg", "/app-icon.png", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -19,14 +19,17 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  // Network-first for API calls, cache-first for static assets
-  if (request.url.includes("/api/")) {
-    event.respondWith(
-      fetch(request).catch(() => caches.match(request))
-    );
-  } else {
-    event.respondWith(
-      caches.match(request).then((cached) => cached || fetch(request))
-    );
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
+
+  // Always fetch page navigations. Caching the app shell made installed PWAs
+  // keep stale client code and fall back to USD before settings loaded.
+  if (request.mode === "navigate") {
+    event.respondWith(fetch(request).catch(() => caches.match(request)));
+    return;
   }
+
+  event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
 });

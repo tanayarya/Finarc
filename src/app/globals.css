@@ -67,6 +67,21 @@
   }
 }
 
+/* Standalone iOS PWAs reserve this space for the Home indicator. */
+@media (max-width: 767px) {
+  .safe-area-bottom {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+
+  .safe-area-content-bottom {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
+
+  .safe-area-fab {
+    bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

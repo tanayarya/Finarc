@@ -11,7 +11,7 @@ export function MobileFab() {
     <>
       <Button
         size="icon"
-        className="fixed bottom-20 right-4 z-40 h-12 w-12 rounded-full shadow-lg md:hidden"
+        className="safe-area-fab fixed right-4 z-40 h-12 w-12 rounded-full shadow-lg md:hidden"
         onClick={() => setOpen(true)}
         aria-label="Add transaction"
       >
