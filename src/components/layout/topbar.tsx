@@ -31,7 +31,7 @@ export function TopBar() {
   React.useEffect(() => setMounted(true), []);
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur md:h-16 md:px-6">
+    <header className="safe-area-top sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur md:h-16 md:px-6">
       <Sheet>
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="md:hidden">

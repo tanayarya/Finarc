@@ -4,6 +4,7 @@ import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { MobileFab } from "@/components/layout/mobile-fab";
 import { PinGate } from "@/components/auth/pin-gate";
 import { AIChatPopup } from "@/components/ai/chat-popup";
+import { CommandPalette } from "@/components/layout/command-palette";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -20,6 +21,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       <AIChatPopup />
+      <CommandPalette />
     </PinGate>
   );
 }

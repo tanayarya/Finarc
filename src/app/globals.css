@@ -67,8 +67,13 @@
   }
 }
 
-/* Standalone iOS PWAs reserve this space for the Home indicator. */
+/* Standalone iOS PWAs reserve space for the status bar and Home indicator. */
 @media (max-width: 767px) {
+  .safe-area-top {
+    height: calc(3.5rem + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
+
   .safe-area-bottom {
     padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
   }

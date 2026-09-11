@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TransactionDialog } from "./transaction-dialog";
 import { useAppSettings } from "@/hooks/use-settings";
+import { OPEN_TRANSACTION_EVENT } from "@/lib/app-events";
 
 export function QuickAddButton() {
   const [open, setOpen] = React.useState(false);
@@ -39,7 +40,12 @@ export function QuickAddButton() {
     };
 
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    const handleOpenTransaction = () => setOpen(true);
+    window.addEventListener(OPEN_TRANSACTION_EVENT, handleOpenTransaction);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener(OPEN_TRANSACTION_EVENT, handleOpenTransaction);
+    };
   }, []);
 
   return (
