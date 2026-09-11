@@ -67,6 +67,7 @@ export function DuesTab() {
       await delJson(`/api/dues/${d.id}`);
       toast.success("Removed");
       mutate("/api/dues");
+      mutate("/api/commitments/forecast");
     } catch (e) { toast.error(e instanceof Error ? e.message : "Failed"); }
   };
 
@@ -75,6 +76,7 @@ export function DuesTab() {
       await patchJson(`/api/dues/${id}`, { action: "settle", amount });
       toast.success("Settlement recorded");
       mutate("/api/dues");
+      mutate("/api/commitments/forecast");
       mutate((key) => typeof key === "string" && key.startsWith("/api/accounts"), undefined, { revalidate: true });
       setSettleId(null);
     } catch (e) { toast.error(e instanceof Error ? e.message : "Failed"); }
@@ -194,6 +196,7 @@ function CreateDueDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
       toast.success("Due recorded");
       onOpenChange(false);
       mutate("/api/dues");
+      mutate("/api/commitments/forecast");
       mutate((key) => typeof key === "string" && key.startsWith("/api/accounts"), undefined, { revalidate: true });
     } catch (e) { toast.error(e instanceof Error ? e.message : "Failed"); }
   });

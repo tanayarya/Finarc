@@ -84,6 +84,7 @@ export function RecurringDialog({ open, onOpenChange, editRule }: Props) {
       }
       onOpenChange(false);
       mutate("/api/recurring");
+      mutate("/api/commitments/forecast");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save");
     }

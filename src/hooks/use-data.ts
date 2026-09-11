@@ -176,6 +176,24 @@ export interface DashboardData {
   }>;
 }
 
+export interface CommitmentForecast {
+  horizonDays: number;
+  liquidBalance: string;
+  liquidAccountCount: number;
+  next30Days: {
+    inflow: string;
+    outflow: string;
+    net: string;
+    projectedBalance: string;
+  };
+  monthlyKnownOutflow: string;
+  runwayMonths: number | null;
+}
+
 export function useDashboard(query: string = "") {
   return useSWR<DashboardData>(`/api/dashboard${query ? `?${query}` : ""}`);
+}
+
+export function useCommitmentForecast() {
+  return useSWR<CommitmentForecast>("/api/commitments/forecast");
 }

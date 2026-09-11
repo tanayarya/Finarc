@@ -32,6 +32,7 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { IncomeExpenseChart } from "@/components/dashboard/income-expense-chart";
 import { CategoryPie } from "@/components/dashboard/category-pie";
 import { SavingsTrendChart } from "@/components/dashboard/savings-trend-chart";
+import { CashRunwayMetrics } from "@/components/dashboard/commitment-calendar";
 import { RangePicker, buildRangeQuery, type RangeValue } from "@/components/dashboard/range-picker";
 import { useDashboard, type DashboardData } from "@/hooks/use-data";
 import { useCurrency } from "@/components/currency-provider";
@@ -148,6 +149,8 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          <CashRunwayMetrics />
 
           <div className="grid gap-3 grid-cols-1 lg:grid-cols-3">
             <Card className="lg:col-span-2 overflow-hidden">

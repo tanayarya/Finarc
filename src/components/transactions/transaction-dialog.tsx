@@ -109,7 +109,8 @@ export function TransactionDialog({
           (key.startsWith("/api/transactions") ||
             key.startsWith("/api/accounts") ||
             key.startsWith("/api/budgets") ||
-            key.startsWith("/api/dashboard")),
+            key.startsWith("/api/dashboard") ||
+            key.startsWith("/api/commitments")),
         undefined,
         { revalidate: true }
       );

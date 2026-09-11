@@ -69,6 +69,7 @@ export default function RecurringPage() {
       await patchJson(`/api/recurring/${rule.id}`, { status: newStatus });
       toast.success(newStatus === "PAUSED" ? "Rule paused" : "Rule resumed");
       mutate("/api/recurring");
+      mutate("/api/commitments/forecast");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to update");
     }
@@ -79,6 +80,7 @@ export default function RecurringPage() {
       await patchJson(`/api/recurring/${rule.id}`, { skipDate: rule.nextRunDate });
       toast.success(`Skipped ${format(new Date(rule.nextRunDate), "MMM d, yyyy")}`);
       mutate("/api/recurring");
+      mutate("/api/commitments/forecast");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to skip");
     }
@@ -96,6 +98,7 @@ export default function RecurringPage() {
       await delJson(`/api/recurring/${rule.id}`);
       toast.success("Rule deleted");
       mutate("/api/recurring");
+      mutate("/api/commitments/forecast");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to delete");
     }
