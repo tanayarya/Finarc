@@ -34,6 +34,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { transactionCreateSchema } from "@/lib/validators";
 import { postJson, patchJson } from "@/lib/fetcher";
+import { evaluateAmountExpression } from "@/lib/amount-expression";
 import { useAccounts, useCategories, type TransactionRow } from "@/hooks/use-data";
 import type { z } from "zod";
 
@@ -66,6 +67,18 @@ export function TransactionDialog({
   });
 
   const type = form.watch("type");
+  const amountField = form.register("amount");
+
+  const resolveAmountExpression = React.useCallback(
+    (event: React.FocusEvent<HTMLInputElement>) => {
+      amountField.onBlur(event);
+      const amount = evaluateAmountExpression(event.target.value);
+      if (amount !== null) {
+        form.setValue("amount", amount, { shouldDirty: true, shouldValidate: true });
+      }
+    },
+    [amountField, form]
+  );
 
   React.useEffect(() => {
     if (open) {
@@ -154,7 +167,8 @@ export function TransactionDialog({
                 id="amount"
                 inputMode="decimal"
                 placeholder="0.00"
-                {...form.register("amount")}
+                {...amountField}
+                onBlur={resolveAmountExpression}
               />
               {form.formState.errors.amount && (
                 <p className="text-xs text-destructive">
