@@ -31,7 +31,14 @@ export async function GET(req: NextRequest) {
     // Stock search via yahoo-finance2
     const { default: YahooFinance } = await import("yahoo-finance2");
     const yahooFinance = new (YahooFinance as any)();
-    const searchResult = await yahooFinance.search(q, { quotesCount: 10 });
+    // Yahoo currently returns `typeDisp: "Equity"`, while this library version
+    // expects lowercase `equity`. The payload itself still contains the fields
+    // we need, so skip the provider's brittle result-schema validation here.
+    const searchResult = await yahooFinance.search(
+      q,
+      { quotesCount: 10 },
+      { validateResult: false }
+    ) as { quotes?: Array<Record<string, unknown>> };
     const results = (searchResult.quotes ?? [])
       .filter((r: any) => r.isYahooFinance !== false)
       .slice(0, 10)
