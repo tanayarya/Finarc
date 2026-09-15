@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { computeBudgetProgress } from "@/lib/finance/budgets";
 import { computeAccountBalance } from "@/lib/finance/balances";
 import { daysUntilCreditDue, nextCreditDueDate } from "@/lib/finance/credit-cards";
+import { toMoney } from "@/lib/money";
 import { addDays, format } from "date-fns";
 
 /**
@@ -276,18 +277,36 @@ export async function notifyLowBalance(): Promise<{ sent: boolean; message?: str
     if (!rule.accountId) continue;
     const { computeAccountBalance } = await import("@/lib/finance/balances");
     const balance = await computeAccountBalance(rule.accountId);
-    const needed = Number(rule.amount);
-    const balNum = balance.toNumber();
+    const needed = toMoney(rule.amount);
 
-    if (balNum < needed) {
+    if (rule.account?.type === "CREDIT") {
+      // A card balance is the amount already owed, not money available to spend.
+      // Negative balances represent prepaid credit and correctly increase headroom.
+      if (!rule.account.creditLimit) continue;
+      const availableCredit = toMoney(rule.account.creditLimit).minus(balance);
+      if (availableCredit.greaterThanOrEqualTo(needed)) continue;
+
+      warnings.push(
+        `Rule: ${rule.name}\n` +
+        `Type: ${recurringAlertTypeLabel(rule)}\n` +
+        `Due: Tomorrow\n` +
+        `Amount needed: ${needed.toFixed(2)}\n` +
+        `Card: ${rule.account.name}\n` +
+        `Available credit: ${availableCredit.toFixed(2)}\n` +
+        `Shortfall: ${needed.minus(availableCredit).toFixed(2)}`
+      );
+      continue;
+    }
+
+    if (balance.lessThan(needed)) {
       warnings.push(
         `Rule: ${rule.name}\n` +
         `Type: ${recurringAlertTypeLabel(rule)}\n` +
         `Due: Tomorrow\n` +
         `Amount needed: ${needed.toFixed(2)}\n` +
         `Account: ${rule.account?.name ?? "Unknown"}\n` +
-        `Current balance: ${balNum.toFixed(2)}\n` +
-        `Shortfall: ${(needed - balNum).toFixed(2)}`
+        `Current balance: ${balance.toFixed(2)}\n` +
+        `Shortfall: ${needed.minus(balance).toFixed(2)}`
       );
     }
   }
