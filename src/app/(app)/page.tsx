@@ -48,6 +48,24 @@ export default function DashboardPage() {
   const query = buildRangeQuery(range);
   const { data, isLoading, mutate } = useDashboard(query);
   const { formatCurrency } = useCurrency();
+  const maintenanceRequested = React.useRef(false);
+
+  React.useEffect(() => {
+    // Scheduled maintenance normally handles due rules. This is a quiet fallback
+    // for home-server installs or a missed cron run, deliberately after the
+    // dashboard data has rendered so it never holds up the initial view.
+    if (!data || maintenanceRequested.current) return;
+    maintenanceRequested.current = true;
+    void fetch("/api/recurring/materialize", { method: "POST" })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json() as Promise<{ data?: { materialized?: number } }>;
+      })
+      .then((response) => {
+        if ((response?.data?.materialized ?? 0) > 0) void mutate();
+      })
+      .catch(() => {});
+  }, [data, mutate]);
 
   const incomeDelta = computeDelta(
     Number(data?.summary.income ?? 0),

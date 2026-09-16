@@ -3,6 +3,7 @@ import { ok, handleError } from "@/lib/api";
 import { fail } from "@/lib/api";
 import { hasValidCronSecret } from "@/lib/machine-auth";
 import { runAllNotifications } from "@/lib/services/notifications";
+import { materializeDueRecurring } from "@/lib/services/recurring";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,9 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   try {
     if (!hasValidCronSecret(req)) return fail("Invalid cron secret", 401);
-    const results = await runAllNotifications();
-    return ok(results);
+    const materialized = await materializeDueRecurring();
+    const notifications = await runAllNotifications();
+    return ok({ materialized, notifications });
   } catch (e) {
     return handleError(e);
   }
@@ -24,8 +26,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     if (!hasValidCronSecret(req)) return fail("Invalid cron secret", 401);
-    const results = await runAllNotifications();
-    return ok(results);
+    const materialized = await materializeDueRecurring();
+    const notifications = await runAllNotifications();
+    return ok({ materialized, notifications });
   } catch (e) {
     return handleError(e);
   }

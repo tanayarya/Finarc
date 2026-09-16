@@ -44,19 +44,37 @@ export async function computeBudgetProgress(
     include: { category: true },
   });
 
+  if (budgets.length === 0) return [];
+
+  const windows = budgets.map((budget) => ({
+    budget,
+    ...periodWindow(budget.period, anchor),
+  }));
+  const rangeStart = windows.reduce((earliest, window) =>
+    window.start < earliest ? window.start : earliest,
+  windows[0].start);
+  const rangeEnd = windows.reduce((latest, window) =>
+    window.end > latest ? window.end : latest,
+  windows[0].end);
+
+  // Fetch the needed expense rows once. The former per-budget query pattern
+  // becomes noticeably slow across a remote serverless database connection.
+  const expenses = await prisma.transaction.findMany({
+    where: {
+      type: "EXPENSE",
+      categoryId: { in: budgets.map((budget) => budget.categoryId) },
+      occurredAt: { gte: rangeStart, lte: rangeEnd },
+      trade: null,
+    },
+    select: { amount: true, categoryId: true, occurredAt: true },
+  });
+
   const result: BudgetProgress[] = [];
-  for (const budget of budgets) {
-    const { start, end } = periodWindow(budget.period, anchor);
-    const txns = await prisma.transaction.findMany({
-      where: {
-        type: "EXPENSE",
-        categoryId: budget.categoryId,
-        occurredAt: { gte: start, lte: end },
-        trade: null,
-      },
-      select: { amount: true },
-    });
-    const spent = txns.reduce<Money>((acc, t) => add(acc, t.amount), ZERO);
+  for (const { budget, start, end } of windows) {
+    const spent = expenses.reduce<Money>((total, expense) => {
+      if (expense.categoryId !== budget.categoryId || expense.occurredAt < start || expense.occurredAt > end) return total;
+      return add(total, expense.amount);
+    }, ZERO);
     const allocated = toMoney(budget.amount);
     const remaining = sub(allocated, spent);
     const usage = ratio(spent, allocated);

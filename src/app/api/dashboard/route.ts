@@ -5,14 +5,11 @@ import {
   totalsForRange,
   incomeExpenseSeries,
   categoryBreakdown,
-  accountDistribution,
 } from "@/lib/finance/analytics";
 import { computeNetWorth } from "@/lib/finance/balances";
 import { computeBudgetProgress } from "@/lib/finance/budgets";
 import { upcomingRecurring } from "@/lib/finance/recurring";
-import { materializeDueRecurring } from "@/lib/services/recurring";
 import { getPortfolioSummary } from "@/lib/services/investments";
-import { runAllNotifications } from "@/lib/services/notifications";
 import { pendingSavingsInterestReviews } from "@/lib/services/savings-interest";
 import { pendingBondInterestReviews } from "@/lib/services/bond-interest";
 import { dashboardReviewDismissMarker, getDismissedDashboardReviewMarkers } from "@/lib/services/dashboard-review-dismissals";
@@ -26,11 +23,6 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
-    // Auto-materialize any overdue recurring transactions on dashboard load
-    await materializeDueRecurring().catch(() => {});
-    // Fire notifications (deduped to once per day, won't block)
-    runAllNotifications().catch(() => {});
-
     const sp = req.nextUrl.searchParams;
     const kind = (sp.get("kind") ?? "MONTH") as DateRangeKind;
     const fromStr = sp.get("from");
@@ -47,20 +39,21 @@ export async function GET(req: NextRequest) {
       previousTotals,
       series,
       categories,
-      accountDist,
       budgets,
       recentTxns,
       upcoming,
       savingsInterestReviews,
       bondInterestReviews,
       dismissedReviewMarkers,
+      creditAccounts,
+      portfolio,
+      maturedHoldingsRaw,
     ] = await Promise.all([
       computeNetWorth(),
       totalsForRange(range),
       totalsForRange(prev),
       incomeExpenseSeries(range),
       categoryBreakdown(range),
-      accountDistribution(),
       computeBudgetProgress(),
       prisma.transaction.findMany({
         orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
@@ -71,34 +64,53 @@ export async function GET(req: NextRequest) {
       pendingSavingsInterestReviews(),
       pendingBondInterestReviews(),
       getDismissedDashboardReviewMarkers(),
+      prisma.account.findMany({
+        where: { archived: false, type: { in: ["CREDIT", "LOAN"] } },
+      }),
+      getPortfolioSummary().catch(() => ({
+        totalInvested: 0,
+        totalCurrentValue: 0,
+        totalPnl: 0,
+        totalPnlPercent: 0,
+        holdings: [],
+      })),
+      prisma.holding.findMany({
+        where: {
+          archived: false,
+          maturityDate: { lte: endOfDay(new Date()) },
+          OR: [
+            { type: "BOND" },
+            { type: "FIXED_DEPOSIT" },
+            { assetClass: "RECURRING_DEPOSIT" },
+          ],
+        },
+        orderBy: { maturityDate: "asc" },
+        take: 5,
+        include: { account: true },
+      }),
     ]);
 
-    const creditAccounts = await prisma.account.findMany({
-      where: { archived: false, type: { in: ["CREDIT", "LOAN"] } },
-    });
-
-    // Get investment portfolio for net worth inclusion
-    const portfolio = await getPortfolioSummary().catch(() => ({
-      totalInvested: 0,
-      totalCurrentValue: 0,
-      totalPnl: 0,
-      totalPnlPercent: 0,
-      holdings: [],
-    }));
-    const maturedHoldingsRaw = await prisma.holding.findMany({
-      where: {
-        archived: false,
-        maturityDate: { lte: endOfDay(new Date()) },
-        OR: [
-          { type: "BOND" },
-          { type: "FIXED_DEPOSIT" },
-          { assetClass: "RECURRING_DEPOSIT" },
-        ],
-      },
-      orderBy: { maturityDate: "asc" },
-      take: 5,
-      include: { account: true },
-    });
+    // computeNetWorth already reads every ledger entry. Reuse that result instead
+    // of scanning the full ledger a second time solely for this distribution.
+    const accountDist = netWorth.byAccount
+      .filter((account) =>
+        (["SAVINGS", "CASH", "INVESTMENT"].includes(account.type) && account.balance.greaterThan(0)) ||
+        (["CREDIT", "LOAN"].includes(account.type) && account.balance.isNegative())
+      )
+      .map((account) => ({
+        accountId: account.accountId,
+        name: account.name,
+        type: account.type,
+        amount: account.balance.abs().toNumber(),
+      }));
+    const accountDistributionTotal = accountDist.reduce((total, account) => total + account.amount, 0);
+    const accountDistribution = accountDist
+      .map((account) => ({
+        ...account,
+        amount: Math.round(account.amount * 100) / 100,
+        share: accountDistributionTotal === 0 ? 0 : account.amount / accountDistributionTotal,
+      }))
+      .sort((a, b) => b.amount - a.amount);
     const maturedHoldings = maturedHoldingsRaw.filter((h) => {
       const marker = dashboardReviewDismissMarker("maturity", h.id, new Date());
       return !dismissedReviewMarkers.has(marker);
@@ -152,7 +164,7 @@ export async function GET(req: NextRequest) {
       },
       series,
       categoryBreakdown: categories,
-      accountDistribution: accountDist,
+      accountDistribution,
       budgets: budgets.map((p) => ({
         id: p.budget.id,
         name: p.budget.name,

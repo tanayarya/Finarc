@@ -10,4 +10,6 @@ export const prisma =
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// A warm Vercel function can serve several requests. Keep one client for that
+// function instance so it does not repeatedly create database connections.
+globalForPrisma.prisma = prisma;
