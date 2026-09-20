@@ -133,6 +133,8 @@ export default function AccountDetailPage() {
                 <div><p className="text-xs text-muted-foreground">Currency</p><p className="font-medium">{a.currency}</p></div>
                 {a.type === "CREDIT" && limit !== null ? <div><p className="text-xs text-muted-foreground">Credit limit</p><p className="tabular font-medium">{formatCurrency(limit)}</p></div> : null}
                 {a.type === "CREDIT" && availableCredit !== null ? <div><p className="text-xs text-muted-foreground">Available credit</p><p className="tabular font-medium">{formatCurrency(availableCredit)}</p></div> : null}
+                {a.type === "CREDIT" && a.statementDay ? <div><p className="text-xs text-muted-foreground">Statement day</p><p className="font-medium">{a.statementDay}</p></div> : null}
+                {a.type === "CREDIT" && a.dueDay ? <div><p className="text-xs text-muted-foreground">Due day</p><p className="font-medium">{a.dueDay}</p></div> : null}
                 {a.type === "SAVINGS" && a.savingsInterestRate ? (
                   <div>
                     <p className="text-xs text-muted-foreground">Savings interest</p>
@@ -142,11 +144,9 @@ export default function AccountDetailPage() {
                 {a.type === "SAVINGS" ? <div><p className="text-xs text-muted-foreground">Account opened</p><p className="font-medium">{format(new Date(a.createdAt), "MMM yyyy")}</p></div> : null}
               </div>
             </div>
-            {(a.institution || a.statementDay || a.dueDay) ? (
+            {a.institution ? (
               <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 border-t pt-4 text-sm sm:grid-cols-3">
                 {a.institution ? <div><p className="text-xs text-muted-foreground">Institution</p><p className="font-medium">{a.institution}</p></div> : null}
-                {a.statementDay ? <div><p className="text-xs text-muted-foreground">Statement day</p><p className="font-medium">{a.statementDay}</p></div> : null}
-                {a.dueDay ? <div><p className="text-xs text-muted-foreground">Due day</p><p className="font-medium">{a.dueDay}</p></div> : null}
               </div>
             ) : null}
             {util !== null ? (
