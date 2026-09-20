@@ -143,7 +143,7 @@ export default function AccountDetailPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="self-start">
           <CardContent className="p-5">
             <CardTitle className="text-sm">Actions</CardTitle>
             <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
