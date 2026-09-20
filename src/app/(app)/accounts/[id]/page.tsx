@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import useSWR, { mutate } from "swr";
-import { ArrowLeft, Archive, ArchiveRestore, Plus, Pencil } from "lucide-react";
+import { ArrowLeft, Archive, ArchiveRestore, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -17,7 +17,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TransactionRow } from "@/components/transactions/transaction-row";
-import { TransactionDialog } from "@/components/transactions/transaction-dialog";
 import { AccountEditDialog } from "@/components/accounts/account-edit-dialog";
 import { AccountInsights, type AccountPeriodInsights } from "@/components/accounts/account-insights";
 import { buildRangeQuery, type RangeValue } from "@/components/dashboard/range-picker";
@@ -40,7 +39,6 @@ export default function AccountDetailPage() {
   const [range, setRange] = React.useState<RangeValue>({ kind: "MONTH" });
   const rangeQuery = buildRangeQuery(range);
   const { data, isLoading } = useSWR<DetailsResponse>(`/api/accounts/${params.id}?${rangeQuery}`, { keepPreviousData: true });
-  const [txOpen, setTxOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
   const confirm = useConfirm();
   const { formatCurrency } = useCurrency();
@@ -67,6 +65,7 @@ export default function AccountDetailPage() {
   const balance = Number(data.balance);
   const limit = a.creditLimit ? Number(a.creditLimit) : null;
   const util = limit && limit > 0 ? balance / limit : null;
+  const availableCredit = limit === null ? null : limit - balance;
   const insightAccountType = a.type === "SAVINGS" || a.type === "CREDIT" ? a.type : null;
 
   const onArchive = async () => {
@@ -98,18 +97,31 @@ export default function AccountDetailPage() {
     }
   };
 
-  const defaultType = a.type === "CREDIT" ? "EXPENSE" : a.type === "LOAN" ? "LOAN_PAYMENT" : "EXPENSE";
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Button asChild variant="ghost" size="icon"><Link href="/accounts"><ArrowLeft className="h-4 w-4" /><span className="sr-only">Back</span></Link></Button>
-        <h2 className="text-xl font-semibold tracking-tight md:text-2xl">{a.name}</h2>
-        <Badge variant="muted" className="ml-2">{a.type}</Badge>
-        {a.archived ? <Badge variant="warning">Archived</Badge> : null}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Button asChild variant="ghost" size="icon"><Link href="/accounts"><ArrowLeft className="h-4 w-4" /><span className="sr-only">Back</span></Link></Button>
+          <h2 className="truncate text-xl font-semibold tracking-tight md:text-2xl">{a.name}</h2>
+          <Badge variant="muted" className="ml-2">{a.type}</Badge>
+          {a.archived ? <Badge variant="warning">Archived</Badge> : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="icon" onClick={() => setEditOpen(true)} aria-label="Edit account"><Pencil className="h-4 w-4" /></Button>
+            </TooltipTrigger>
+            <TooltipContent>Edit account</TooltipContent>
+          </Tooltip>
+          {a.archived ? (
+            <Button variant="outline" size="sm" className="gap-2" onClick={onRestore}><ArchiveRestore className="h-4 w-4" /> Restore</Button>
+          ) : (
+            <Button variant="outline" size="sm" className="gap-2" onClick={onArchive}><Archive className="h-4 w-4" /> Archive</Button>
+          )}
+        </div>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div>
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
@@ -117,10 +129,13 @@ export default function AccountDetailPage() {
               <Badge variant="muted">{a.currency}</Badge>
             </div>
             <p className="mt-1 tabular text-xl font-semibold sm:text-3xl">{formatCurrency(balance)}</p>
-            <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 text-sm">
+            <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3 xl:grid-cols-6 text-sm">
               <div><p className="text-xs text-muted-foreground">Opening balance</p><p className="tabular font-medium">{formatCurrency(a.openingBalance)}</p></div>
               <div><p className="text-xs text-muted-foreground">Currency</p><p className="font-medium">{a.currency}</p></div>
               {a.institution ? <div><p className="text-xs text-muted-foreground">Institution</p><p className="font-medium">{a.institution}</p></div> : null}
+              {a.type === "CREDIT" && limit !== null ? <div><p className="text-xs text-muted-foreground">Credit limit</p><p className="tabular font-medium">{formatCurrency(limit)}</p></div> : null}
+              {a.type === "CREDIT" && availableCredit !== null ? <div><p className="text-xs text-muted-foreground">Available credit</p><p className="tabular font-medium">{formatCurrency(availableCredit)}</p></div> : null}
+              {a.statementDay ? <div><p className="text-xs text-muted-foreground">Statement day</p><p className="font-medium">{a.statementDay}</p></div> : null}
               {a.dueDay ? <div><p className="text-xs text-muted-foreground">Due day</p><p className="font-medium">{a.dueDay}</p></div> : null}
               {a.type === "SAVINGS" && a.savingsInterestRate ? (
                 <div>
@@ -128,6 +143,7 @@ export default function AccountDetailPage() {
                   <p className="font-medium">{a.savingsInterestRate}% · {(a.savingsInterestFrequency ?? "QUARTERLY").toLowerCase()}</p>
                 </div>
               ) : null}
+              <div><p className="text-xs text-muted-foreground">Account opened</p><p className="font-medium">{format(new Date(a.createdAt), "MMM yyyy")}</p></div>
             </div>
             {util !== null ? (
               <>
@@ -140,36 +156,6 @@ export default function AccountDetailPage() {
               </>
             ) : null}
             {a.notes ? <><Separator className="my-4" /><p className="text-sm text-muted-foreground">{a.notes}</p></> : null}
-          </CardContent>
-        </Card>
-
-        <Card className="self-start">
-          <CardContent className="p-5">
-            <CardTitle className="text-sm">Actions</CardTitle>
-            <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
-              <Button className="justify-start gap-2" onClick={() => setTxOpen(true)} disabled={a.archived}><Plus className="h-4 w-4" /> Record transaction</Button>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" onClick={() => setEditOpen(true)} aria-label="Edit account"><Pencil className="h-4 w-4" /></Button>
-                </TooltipTrigger>
-                <TooltipContent>Edit account</TooltipContent>
-              </Tooltip>
-            {a.archived ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" onClick={onRestore} aria-label="Restore account"><ArchiveRestore className="h-4 w-4" /></Button>
-                </TooltipTrigger>
-                <TooltipContent>Restore account</TooltipContent>
-              </Tooltip>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" onClick={onArchive} aria-label="Archive account"><Archive className="h-4 w-4" /></Button>
-                </TooltipTrigger>
-                <TooltipContent>Archive account</TooltipContent>
-              </Tooltip>
-            )}
-            </div>
           </CardContent>
         </Card>
       </div>
@@ -185,7 +171,6 @@ export default function AccountDetailPage() {
         />
       ) : null}
 
-      <TransactionDialog open={txOpen} onOpenChange={setTxOpen} defaultType={defaultType as never} defaultAccountId={a.id} />
       <AccountEditDialog open={editOpen} onOpenChange={setEditOpen} account={a} />
 
       <Card>
