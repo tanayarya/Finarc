@@ -18,6 +18,8 @@ import { Progress } from "@/components/ui/progress";
 import { TransactionRow } from "@/components/transactions/transaction-row";
 import { TransactionDialog } from "@/components/transactions/transaction-dialog";
 import { AccountEditDialog } from "@/components/accounts/account-edit-dialog";
+import { AccountInsights, type AccountPeriodInsights } from "@/components/accounts/account-insights";
+import { buildRangeQuery, type RangeValue } from "@/components/dashboard/range-picker";
 import { useConfirm } from "@/components/confirm-provider";
 import { useCurrency } from "@/components/currency-provider";
 import { delJson, patchJson } from "@/lib/fetcher";
@@ -29,11 +31,14 @@ interface DetailsResponse {
   account: AccountWithBalance & { createdAt: string; openingBalance: string };
   balance: string;
   recentTransactions: TxRow[];
+  insights: AccountPeriodInsights | null;
 }
 
 export default function AccountDetailPage() {
   const params = useParams<{ id: string }>();
-  const { data, isLoading } = useSWR<DetailsResponse>(`/api/accounts/${params.id}`);
+  const [range, setRange] = React.useState<RangeValue>({ kind: "MONTH" });
+  const rangeQuery = buildRangeQuery(range);
+  const { data, isLoading } = useSWR<DetailsResponse>(`/api/accounts/${params.id}?${rangeQuery}`, { keepPreviousData: true });
   const [txOpen, setTxOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
   const confirm = useConfirm();
@@ -61,6 +66,7 @@ export default function AccountDetailPage() {
   const balance = Number(data.balance);
   const limit = a.creditLimit ? Number(a.creditLimit) : null;
   const util = limit && limit > 0 ? balance / limit : null;
+  const insightAccountType = a.type === "SAVINGS" || a.type === "CREDIT" ? a.type : null;
 
   const onArchive = async () => {
     const ok = await confirm({
@@ -104,7 +110,7 @@ export default function AccountDetailPage() {
 
       <div className="grid gap-3 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-4">
             <div className="flex items-center justify-between">
               <CardDescription>Current balance</CardDescription>
               <Badge variant="muted">{a.currency}</Badge>
@@ -112,7 +118,7 @@ export default function AccountDetailPage() {
             <p className="tabular text-xl font-semibold sm:text-3xl">{formatCurrency(balance)}</p>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 text-sm">
               <div><p className="text-xs text-muted-foreground">Opening balance</p><p className="tabular font-medium">{formatCurrency(a.openingBalance)}</p></div>
               <div><p className="text-xs text-muted-foreground">Currency</p><p className="font-medium">{a.currency}</p></div>
               {a.institution ? <div><p className="text-xs text-muted-foreground">Institution</p><p className="font-medium">{a.institution}</p></div> : null}
@@ -152,6 +158,17 @@ export default function AccountDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {insightAccountType && data.insights ? (
+        <AccountInsights
+          accountType={insightAccountType}
+          balance={balance}
+          creditLimit={limit}
+          insights={data.insights}
+          range={range}
+          onRangeChange={setRange}
+        />
+      ) : null}
 
       <TransactionDialog open={txOpen} onOpenChange={setTxOpen} defaultType={defaultType as never} defaultAccountId={a.id} />
       <AccountEditDialog open={editOpen} onOpenChange={setEditOpen} account={a} />

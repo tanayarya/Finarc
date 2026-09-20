@@ -2,12 +2,24 @@ import { NextRequest } from "next/server";
 import { ok, handleError, fail } from "@/lib/api";
 import { archiveAccount, getAccountDetails, updateAccount } from "@/lib/services/accounts";
 import { serialize } from "@/lib/serialize";
+import { rangeForKind, type DateRangeKind } from "@/lib/finance/dates";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest, ctx: { params: { id: string } }) {
+export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
   try {
-    const details = await getAccountDetails(ctx.params.id);
+    const params = req.nextUrl.searchParams;
+    const requestedKind = params.get("kind");
+    const kind = (["WEEK", "MONTH", "YEAR", "CUSTOM"] as const).includes(requestedKind as DateRangeKind)
+      ? requestedKind as DateRangeKind
+      : "MONTH";
+    const details = await getAccountDetails(
+      ctx.params.id,
+      rangeForKind(kind, {
+        from: params.get("from") ? new Date(params.get("from")!) : undefined,
+        to: params.get("to") ? new Date(params.get("to")!) : undefined,
+      })
+    );
     if (!details) return fail("Account not found", 404);
     return ok(serialize(details));
   } catch (e) {
