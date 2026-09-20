@@ -3,7 +3,6 @@
 import { ArrowDownLeft, ArrowUpRight, CreditCard, Landmark, ReceiptText, Sparkles } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { RangePicker, type RangeValue } from "@/components/dashboard/range-picker";
 import { useCurrency } from "@/components/currency-provider";
 
@@ -40,7 +39,6 @@ export function AccountInsights({
   const { formatCurrency } = useCurrency();
   const isCredit = accountType === "CREDIT";
   const availableCredit = creditLimit === null ? null : Math.max(0, creditLimit - balance);
-  const utilization = creditLimit && creditLimit > 0 ? Math.max(0, balance / creditLimit) : null;
   const netMovement = Number(insights.totalCredits) - Number(insights.totalDebits);
 
   const metrics = isCredit
@@ -81,28 +79,18 @@ export function AccountInsights({
         ))}
       </div>
 
-      <div className="grid gap-3 rounded-md border bg-muted/20 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">{isCredit ? "Current card status" : "Net cash movement"}</p>
-          {isCredit ? (
-            <>
-              <p className="tabular text-sm font-semibold">{formatCurrency(Math.max(0, balance))} outstanding</p>
-              {utilization !== null ? (
-                <div className="space-y-1.5 pt-1">
-                  <Progress value={Math.min(100, utilization * 100)} />
-                  <p className="text-xs text-muted-foreground">{Math.round(utilization * 100)}% of your limit used</p>
-                </div>
-              ) : null}
-            </>
-          ) : (
+      <div className={`grid gap-3 rounded-md border bg-muted/20 p-4 ${isCredit ? "" : "lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]"}`}>
+        {!isCredit ? (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">Net cash movement</p>
             <>
               <p className={`tabular text-sm font-semibold ${netMovement < 0 ? "text-rose-500" : "text-emerald-500"}`}>
                 {netMovement > 0 ? "+" : ""}{formatCurrency(netMovement)}
               </p>
               <p className="text-xs text-muted-foreground">Credits less debits in this period</p>
             </>
-          )}
-        </div>
+          </div>
+        ) : null}
 
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground">Top spending categories</p>

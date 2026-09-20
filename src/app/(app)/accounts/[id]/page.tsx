@@ -15,6 +15,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TransactionRow } from "@/components/transactions/transaction-row";
 import { TransactionDialog } from "@/components/transactions/transaction-dialog";
 import { AccountEditDialog } from "@/components/accounts/account-edit-dialog";
@@ -108,17 +109,15 @@ export default function AccountDetailPage() {
         {a.archived ? <Badge variant="warning">Archived</Badge> : null}
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-4">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Card>
+          <CardContent className="p-5">
             <div className="flex items-center justify-between">
-              <CardDescription>Current balance</CardDescription>
+              <p className="text-sm text-muted-foreground">Current balance</p>
               <Badge variant="muted">{a.currency}</Badge>
             </div>
-            <p className="tabular text-xl font-semibold sm:text-3xl">{formatCurrency(balance)}</p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 text-sm">
+            <p className="mt-1 tabular text-xl font-semibold sm:text-3xl">{formatCurrency(balance)}</p>
+            <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 text-sm">
               <div><p className="text-xs text-muted-foreground">Opening balance</p><p className="tabular font-medium">{formatCurrency(a.openingBalance)}</p></div>
               <div><p className="text-xs text-muted-foreground">Currency</p><p className="font-medium">{a.currency}</p></div>
               {a.institution ? <div><p className="text-xs text-muted-foreground">Institution</p><p className="font-medium">{a.institution}</p></div> : null}
@@ -132,7 +131,7 @@ export default function AccountDetailPage() {
             </div>
             {util !== null ? (
               <>
-                <Separator />
+                <Separator className="my-4" />
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs"><span>Utilization</span><span className="tabular">{formatPercent(util)}</span></div>
                   <Progress value={Math.min(100, util * 100)} />
@@ -140,21 +139,37 @@ export default function AccountDetailPage() {
                 </div>
               </>
             ) : null}
-            {a.notes ? <><Separator /><p className="text-sm text-muted-foreground">{a.notes}</p></> : null}
+            {a.notes ? <><Separator className="my-4" /><p className="text-sm text-muted-foreground">{a.notes}</p></> : null}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-sm">Actions</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            <Button className="w-full justify-start gap-2" onClick={() => setTxOpen(true)} disabled={a.archived}><Plus className="h-4 w-4" /> Record transaction</Button>
-            <Button variant="outline" className="w-full justify-start gap-2" onClick={() => setEditOpen(true)}><Pencil className="h-4 w-4" /> Edit account</Button>
+          <CardContent className="p-5">
+            <CardTitle className="text-sm">Actions</CardTitle>
+            <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
+              <Button className="justify-start gap-2" onClick={() => setTxOpen(true)} disabled={a.archived}><Plus className="h-4 w-4" /> Record transaction</Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" onClick={() => setEditOpen(true)} aria-label="Edit account"><Pencil className="h-4 w-4" /></Button>
+                </TooltipTrigger>
+                <TooltipContent>Edit account</TooltipContent>
+              </Tooltip>
             {a.archived ? (
-              <Button variant="outline" className="w-full justify-start gap-2" onClick={onRestore}><ArchiveRestore className="h-4 w-4" /> Restore account</Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" onClick={onRestore} aria-label="Restore account"><ArchiveRestore className="h-4 w-4" /></Button>
+                </TooltipTrigger>
+                <TooltipContent>Restore account</TooltipContent>
+              </Tooltip>
             ) : (
-              <Button variant="outline" className="w-full justify-start gap-2" onClick={onArchive}><Archive className="h-4 w-4" /> Archive account</Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" onClick={onArchive} aria-label="Archive account"><Archive className="h-4 w-4" /></Button>
+                </TooltipTrigger>
+                <TooltipContent>Archive account</TooltipContent>
+              </Tooltip>
             )}
-            <p className="pt-2 text-xs text-muted-foreground">{a.archived ? "Archived accounts are hidden from active lists, but their ledger stays preserved." : "Manual balance editing is intentionally disabled. Adjustments must flow through transactions."}</p>
+            </div>
           </CardContent>
         </Card>
       </div>
