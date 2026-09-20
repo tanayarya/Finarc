@@ -124,27 +124,31 @@ export default function AccountDetailPage() {
       <div>
         <Card>
           <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">Current balance</p>
-              <Badge variant="muted">{a.currency}</Badge>
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Current balance</p>
+                <p className="mt-1 tabular text-xl font-semibold sm:text-3xl">{formatCurrency(balance)}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
+                <div><p className="text-xs text-muted-foreground">Currency</p><p className="font-medium">{a.currency}</p></div>
+                {a.type === "CREDIT" && limit !== null ? <div><p className="text-xs text-muted-foreground">Credit limit</p><p className="tabular font-medium">{formatCurrency(limit)}</p></div> : null}
+                {a.type === "CREDIT" && availableCredit !== null ? <div><p className="text-xs text-muted-foreground">Available credit</p><p className="tabular font-medium">{formatCurrency(availableCredit)}</p></div> : null}
+                {a.type === "SAVINGS" && a.savingsInterestRate ? (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Savings interest</p>
+                    <p className="font-medium">{a.savingsInterestRate}% · {(a.savingsInterestFrequency ?? "QUARTERLY").toLowerCase()}</p>
+                  </div>
+                ) : null}
+                {a.type === "SAVINGS" ? <div><p className="text-xs text-muted-foreground">Account opened</p><p className="font-medium">{format(new Date(a.createdAt), "MMM yyyy")}</p></div> : null}
+              </div>
             </div>
-            <p className="mt-1 tabular text-xl font-semibold sm:text-3xl">{formatCurrency(balance)}</p>
-            <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3 xl:grid-cols-6 text-sm">
-              <div><p className="text-xs text-muted-foreground">Opening balance</p><p className="tabular font-medium">{formatCurrency(a.openingBalance)}</p></div>
-              <div><p className="text-xs text-muted-foreground">Currency</p><p className="font-medium">{a.currency}</p></div>
-              {a.institution ? <div><p className="text-xs text-muted-foreground">Institution</p><p className="font-medium">{a.institution}</p></div> : null}
-              {a.type === "CREDIT" && limit !== null ? <div><p className="text-xs text-muted-foreground">Credit limit</p><p className="tabular font-medium">{formatCurrency(limit)}</p></div> : null}
-              {a.type === "CREDIT" && availableCredit !== null ? <div><p className="text-xs text-muted-foreground">Available credit</p><p className="tabular font-medium">{formatCurrency(availableCredit)}</p></div> : null}
-              {a.statementDay ? <div><p className="text-xs text-muted-foreground">Statement day</p><p className="font-medium">{a.statementDay}</p></div> : null}
-              {a.dueDay ? <div><p className="text-xs text-muted-foreground">Due day</p><p className="font-medium">{a.dueDay}</p></div> : null}
-              {a.type === "SAVINGS" && a.savingsInterestRate ? (
-                <div>
-                  <p className="text-xs text-muted-foreground">Savings interest</p>
-                  <p className="font-medium">{a.savingsInterestRate}% · {(a.savingsInterestFrequency ?? "QUARTERLY").toLowerCase()}</p>
-                </div>
-              ) : null}
-              <div><p className="text-xs text-muted-foreground">Account opened</p><p className="font-medium">{format(new Date(a.createdAt), "MMM yyyy")}</p></div>
-            </div>
+            {(a.institution || a.statementDay || a.dueDay) ? (
+              <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 border-t pt-4 text-sm sm:grid-cols-3">
+                {a.institution ? <div><p className="text-xs text-muted-foreground">Institution</p><p className="font-medium">{a.institution}</p></div> : null}
+                {a.statementDay ? <div><p className="text-xs text-muted-foreground">Statement day</p><p className="font-medium">{a.statementDay}</p></div> : null}
+                {a.dueDay ? <div><p className="text-xs text-muted-foreground">Due day</p><p className="font-medium">{a.dueDay}</p></div> : null}
+              </div>
+            ) : null}
             {util !== null ? (
               <>
                 <Separator className="my-4" />
