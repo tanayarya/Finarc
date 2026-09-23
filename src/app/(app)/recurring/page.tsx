@@ -109,7 +109,16 @@ export default function RecurringPage() {
       const res = await fetch("/api/recurring/materialize", { method: "POST" });
       const json = await res.json();
       const count = json?.data?.materialized ?? 0;
-      toast.success(count > 0 ? `Generated ${count} transaction(s)` : "Nothing due yet");
+      const deferredForNav = json?.data?.deferredForNav ?? 0;
+      if (count > 0) {
+        toast.success(
+          `Generated ${count} transaction(s)${deferredForNav > 0 ? `; ${deferredForNav} SIP${deferredForNav === 1 ? "" : "s"} waiting for official NAV` : ""}`
+        );
+      } else if (deferredForNav > 0) {
+        toast.message("SIP is waiting for its official NAV");
+      } else {
+        toast.success("Nothing due yet");
+      }
       mutate(() => true, undefined, { revalidate: true });
     } catch (e) {
       toast.error("Failed to materialize");

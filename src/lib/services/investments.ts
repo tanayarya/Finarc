@@ -4,7 +4,7 @@ import { toMoney, ZERO } from "@/lib/money";
 import { calculateCharges, type ChargeRates, DEFAULT_CHARGE_RATES } from "@/lib/finance/trading-charges";
 import { nextOccurrence } from "@/lib/finance/dates";
 import type { Holding, InvestmentType, TradeAction } from "@prisma/client";
-import { startOfDay } from "date-fns";
+import { startOfFinanceDay } from "@/lib/finance/dates";
 
 // ─── Charge settings from settings ─────────────────────────────────────
 
@@ -645,20 +645,15 @@ export async function fetchMFNavForDate(
   schemeCode: string,
   targetDate: Date
 ): Promise<{ nav: number; navDate: Date } | null> {
-  const target = startOfDay(targetDate);
-  try {
-    const latest = await fetch(`https://api.mfapi.in/mf/${schemeCode}/latest`);
-    if (latest.ok) {
-      const latestData = await latest.json();
-      const row = latestData?.data?.[0];
-      const navDate = parseMfApiDate(row?.date);
-      const nav = row?.nav ? parseFloat(row.nav) : null;
-      if (nav && navDate && navDate >= target) return { nav, navDate };
-    }
-  } catch {}
+  const target = startOfFinanceDay(targetDate);
+  const officialNav = await fetchAmfiHistoricalNav(schemeCode, target);
+  if (officialNav) return officialNav;
 
+  // MFAPI remains a useful fallback when AMFI's historical endpoint is
+  // temporarily unavailable. Its full-history feed lets us still choose the
+  // first available NAV on or after the scheduled SIP date.
   try {
-    const res = await fetch(`https://api.mfapi.in/mf/${schemeCode}`);
+    const res = await fetchMFApi(`https://api.mfapi.in/mf/${schemeCode}`);
     if (!res.ok) return null;
     const data = await res.json();
     const rows = Array.isArray(data?.data) ? data.data : [];
@@ -679,7 +674,82 @@ function parseMfApiDate(value: unknown) {
   if (typeof value !== "string") return null;
   const [dd, mm, yyyy] = value.split("-").map(Number);
   if (!dd || !mm || !yyyy) return null;
-  return startOfDay(new Date(yyyy, mm - 1, dd));
+  return startOfFinanceDay(new Date(Date.UTC(yyyy, mm - 1, dd)));
+}
+
+const AMFI_CACHE_TTL_MS = 10 * 60 * 1000;
+const AMFI_TIME_ZONE_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+const AMFI_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const amfiHistoryCache = new Map<string, { expiresAt: number; values: Map<string, { nav: number; navDate: Date }> }>();
+const amfiHistoryLoads = new Map<string, Promise<Map<string, { nav: number; navDate: Date }>>>();
+
+async function fetchAmfiHistoricalNav(schemeCode: string, targetDate: Date) {
+  const today = startOfFinanceDay(new Date());
+  if (targetDate > today) return null;
+
+  const cacheKey = `${financeDateForAmfi(targetDate)}:${financeDateForAmfi(today)}`;
+  const cached = amfiHistoryCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.values.get(schemeCode) ?? null;
+
+  let load = amfiHistoryLoads.get(cacheKey);
+  if (!load) {
+    load = loadAmfiHistoricalNavs(targetDate, today);
+    amfiHistoryLoads.set(cacheKey, load);
+  }
+
+  try {
+    const values = await load;
+    amfiHistoryCache.set(cacheKey, { values, expiresAt: Date.now() + AMFI_CACHE_TTL_MS });
+    return values.get(schemeCode) ?? null;
+  } catch {
+    return null;
+  } finally {
+    amfiHistoryLoads.delete(cacheKey);
+  }
+}
+
+async function loadAmfiHistoricalNavs(from: Date, to: Date) {
+  const params = new URLSearchParams({
+    frmdt: financeDateForAmfi(from),
+    todt: financeDateForAmfi(to),
+  });
+  const response = await fetchMFApi(`https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx?${params}`);
+  if (!response.ok) throw new Error("AMFI NAV history is unavailable");
+
+  const values = new Map<string, { nav: number; navDate: Date }>();
+  const text = await response.text();
+  for (const line of text.split(/\r?\n/)) {
+    const [schemeCode, , , , , , navValue, dateValue] = line.split(";");
+    if (!schemeCode || !navValue || !dateValue) continue;
+    const nav = Number(navValue);
+    const navDate = parseAmfiDate(dateValue);
+    if (!Number.isFinite(nav) || !navDate || navDate < from || navDate > to) continue;
+    const existing = values.get(schemeCode);
+    if (!existing || navDate < existing.navDate) values.set(schemeCode, { nav, navDate });
+  }
+  return values;
+}
+
+function parseAmfiDate(value: string) {
+  const [day, monthName, year] = value.trim().split("-");
+  const month = AMFI_MONTHS.indexOf(monthName);
+  if (!day || month < 0 || !year) return null;
+  return startOfFinanceDay(new Date(Date.UTC(Number(year), month, Number(day))));
+}
+
+function financeDateForAmfi(date: Date) {
+  const shifted = new Date(date.getTime() + AMFI_TIME_ZONE_OFFSET_MS);
+  return `${String(shifted.getUTCDate()).padStart(2, "0")}-${AMFI_MONTHS[shifted.getUTCMonth()]}-${shifted.getUTCFullYear()}`;
+}
+
+async function fetchMFApi(url: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4_000);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function round2(n: number) {

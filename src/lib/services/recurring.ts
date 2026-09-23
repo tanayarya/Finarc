@@ -2,10 +2,15 @@ import { prisma } from "@/lib/prisma";
 import { Decimal } from "decimal.js";
 import type { z } from "zod";
 import { recurringCreateSchema, recurringUpdateSchema } from "@/lib/validators";
-import { nextOccurrence } from "@/lib/finance/dates";
-import { addDays, isAfter, isSameDay, startOfDay } from "date-fns";
+import { nextOccurrence, startOfFinanceDay } from "@/lib/finance/dates";
+import { addDays, isAfter, isSameDay } from "date-fns";
 import type { Holding } from "@prisma/client";
 import { fetchMFNavForDate } from "@/lib/services/investments";
+
+export interface RecurringMaterializationResult {
+  materialized: number;
+  deferredForNav: number;
+}
 
 export async function createRecurringRule(raw: z.infer<typeof recurringCreateSchema>) {
   const input = recurringCreateSchema.parse(raw);
@@ -78,12 +83,19 @@ export async function deleteRecurringRule(id: string) {
  * Designed to be safe to call on every dashboard load.
  */
 export async function materializeDueRecurring(now = new Date()): Promise<number> {
-  await reconcileUnlinkedRecurringInvestmentTransactions(now);
+  const result = await materializeDueRecurringWithResult(now);
+  return result.materialized;
+}
+
+export async function materializeDueRecurringWithResult(
+  now = new Date()
+): Promise<RecurringMaterializationResult> {
   const due = await prisma.recurringRule.findMany({
     where: { status: "ACTIVE", nextRunDate: { lte: now } },
     include: { sipHoldings: true },
   });
   let count = 0;
+  let deferredForNav = 0;
   for (const rule of due) {
     let cursor = new Date(rule.nextRunDate);
     let safety = 0;
@@ -123,7 +135,10 @@ export async function materializeDueRecurring(now = new Date()): Promise<number>
         const investmentPlan = investmentHolding && rule.type === "EXPENSE"
           ? await buildRecurringInvestmentPlan(investmentHolding, paymentAmount.toString(), cursor, now)
           : null;
-        if (investmentPlan && !investmentPlan.ready) break;
+        if (investmentPlan && !investmentPlan.ready) {
+          deferredForNav += 1;
+          break;
+        }
 
         const txn = await prisma.transaction.create({
           data: {
@@ -154,7 +169,12 @@ export async function materializeDueRecurring(now = new Date()): Promise<number>
       data: { nextRunDate: cursor },
     });
   }
-  return count;
+  // Older versions could write an MF debit before its NAV was available. Repair
+  // those records after today's due items, so a slow price provider never blocks
+  // normal recurring expenses, transfers, or already-priced investments.
+  await reconcileUnlinkedRecurringInvestmentTransactions(now);
+
+  return { materialized: count, deferredForNav };
 }
 
 type RecurringRuleWithHoldings = Awaited<ReturnType<typeof prisma.recurringRule.findMany>>[number] & {
@@ -220,7 +240,7 @@ async function buildRecurringInvestmentPlan(
   if (holding.type === "MUTUAL_FUND") {
     const navTargetDate = nextMarketBusinessDay(dueDate);
     const nav = await fetchMFNavForDate(holding.symbol, navTargetDate);
-    if (!nav || nav.navDate > startOfDay(now)) return { ready: false };
+    if (!nav || nav.navDate > startOfFinanceDay(now)) return { ready: false };
     const price = new Decimal(nav.nav);
     if (price.lte(0)) return { ready: false };
     return {
@@ -319,7 +339,7 @@ async function reconcileUnlinkedRecurringInvestmentTransactions(now: Date) {
       type: "EXPENSE",
       recurringRuleId: { not: null },
       trade: null,
-      occurredAt: { lte: now },
+      occurredAt: { gte: addDays(startOfFinanceDay(now), -14), lte: now },
     },
     include: {
       recurringRule: { include: { sipHoldings: true } },
@@ -328,21 +348,14 @@ async function reconcileUnlinkedRecurringInvestmentTransactions(now: Date) {
     take: 50,
   });
 
-  for (const txn of txns) {
-    if (!txn.recurringRule) continue;
+  await Promise.all(txns.map(async (txn) => {
+    if (!txn.recurringRule) return;
     const holding = await findRecurringInvestmentHolding(txn.recurringRule);
-    if (!holding) continue;
+    if (!holding) return;
     const plan = await buildRecurringInvestmentPlan(holding, txn.amount.toString(), txn.occurredAt, now);
-    if (!plan.ready) {
-      await prisma.transaction.delete({ where: { id: txn.id } });
-      if (txn.recurringRule.nextRunDate > txn.occurredAt) {
-        await prisma.recurringRule.update({
-          where: { id: txn.recurringRule.id },
-          data: { nextRunDate: txn.occurredAt },
-        });
-      }
-      continue;
-    }
+    // Keep a legacy debit intact until a valid NAV is available. Deleting it
+    // would temporarily overstate the account balance and make a retry unsafe.
+    if (!plan.ready) return;
     if (holding.assetClass === "RECURRING_DEPOSIT") {
       await applyRecurringDepositInstallment(holding.id, txn.amount.toString(), txn.occurredAt, txn.id);
     } else {
@@ -352,15 +365,19 @@ async function reconcileUnlinkedRecurringInvestmentTransactions(now: Date) {
       });
       await applyRecurringInvestmentBuy(holding.id, plan, txn.id);
     }
-  }
+  }));
 }
 
 function nextMarketBusinessDay(date: Date) {
-  let cursor = startOfDay(date);
-  while (cursor.getDay() === 0 || cursor.getDay() === 6) {
+  let cursor = startOfFinanceDay(date);
+  while (indiaWeekday(cursor) === 0 || indiaWeekday(cursor) === 6) {
     cursor = addDays(cursor, 1);
   }
   return cursor;
+}
+
+function indiaWeekday(date: Date) {
+  return new Date(date.getTime() + 5.5 * 60 * 60 * 1000).getUTCDay();
 }
 
 async function applyRecurringDepositInstallment(
