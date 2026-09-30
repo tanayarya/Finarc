@@ -324,6 +324,19 @@ model Trade {
   @@index([occurredAt])
 }
 
+// One aggregate valuation per India calendar day. This keeps portfolio history
+// lightweight while preserving an accurate invested-cost versus market-value view.
+model PortfolioSnapshot {
+  id           String   @id @default(cuid())
+  snapshotDate DateTime @unique @db.Date
+  invested     Decimal  @db.Decimal(18, 2)
+  currentValue Decimal  @db.Decimal(18, 2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([snapshotDate])
+}
+
 // ─── Dues / Receivables ────────────────────────────────────────────────
 
 enum DueType {

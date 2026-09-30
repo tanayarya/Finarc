@@ -62,6 +62,7 @@ interface PortfolioData {
   totalPnl: number;
   totalPnlPercent: number;
   holdings: HoldingItem[];
+  history: Array<{ date: string; invested: number; currentValue: number }>;
 }
 
 const TYPE_ICONS = {
@@ -208,6 +209,12 @@ export default function InvestmentsPage() {
             <Card><CardHeader className="pb-2"><CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Returns</CardTitle></CardHeader><CardContent><p className={cn("tabular text-lg font-semibold sm:text-2xl", data!.totalPnlPercent >= 0 ? "text-emerald-600" : "text-rose-600")}>{data!.totalPnlPercent >= 0 ? "+" : ""}{data!.totalPnlPercent.toFixed(2)}%</p></CardContent></Card>
           </div>
 
+          <PortfolioGrowthChart
+            data={data!.history}
+            formatCurrency={formatCurrency}
+            formatCompactCurrency={formatCompactCurrency}
+          />
+
           {/* Charts section — above tabs */}
           <div className="grid gap-3 lg:grid-cols-2">
             {/* Total wealth pie */}
@@ -309,6 +316,55 @@ export default function InvestmentsPage() {
       <EditHoldingDialog open={Boolean(editHolding)} onOpenChange={(o) => { if (!o) setEditHolding(null); }} holding={editHolding} />
       <SipDialog open={Boolean(sipHolding)} onOpenChange={(o) => { if (!o) setSipHolding(null); }} holding={sipHolding} />
     </div>
+  );
+}
+
+function PortfolioGrowthChart({
+  data,
+  formatCurrency,
+  formatCompactCurrency,
+}: {
+  data: PortfolioData["history"];
+  formatCurrency: (v: number | string | null | undefined) => string;
+  formatCompactCurrency: (v: number | string | null | undefined) => string;
+}) {
+  const hasHistory = data.length > 1;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle className="text-sm">Portfolio growth</CardTitle>
+            <CardDescription>
+              {hasHistory ? "Invested cost compared with your portfolio's current value" : "Your first daily snapshot is saved today; this history builds as prices refresh."}
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-[hsl(var(--chart-1))]" />Invested</span>
+            <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-[hsl(var(--chart-2))]" />Current value</span>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[220px] w-full sm:h-[250px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 10, right: 8, left: -12, bottom: 0 }}>
+              <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={10} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+              <YAxis tickFormatter={(value) => formatCompactCurrency(Number(value))} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} width={64} />
+              <Tooltip
+                cursor={{ stroke: "hsl(var(--border))" }}
+                contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12, color: "hsl(var(--popover-foreground))" }}
+                formatter={(value: number, key) => [formatCurrency(value), key === "currentValue" ? "Current value" : "Invested"]}
+              />
+              <Line type="monotone" dataKey="invested" stroke="hsl(var(--chart-1))" strokeWidth={2.25} dot={!hasHistory} activeDot={{ r: 4 }} name="Invested" />
+              <Line type="monotone" dataKey="currentValue" stroke="hsl(var(--chart-2))" strokeWidth={2.25} dot={!hasHistory} activeDot={{ r: 4 }} name="Current value" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

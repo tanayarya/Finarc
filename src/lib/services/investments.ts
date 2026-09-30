@@ -2,9 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { Decimal } from "decimal.js";
 import { toMoney, ZERO } from "@/lib/money";
 import { calculateCharges, type ChargeRates, DEFAULT_CHARGE_RATES } from "@/lib/finance/trading-charges";
-import { nextOccurrence } from "@/lib/finance/dates";
+import { financeDayKey, nextOccurrence, startOfFinanceDay } from "@/lib/finance/dates";
 import type { Holding, InvestmentType, TradeAction } from "@prisma/client";
-import { startOfFinanceDay } from "@/lib/finance/dates";
 
 // ─── Charge settings from settings ─────────────────────────────────────
 
@@ -497,7 +496,10 @@ export async function recordDividendOrInterest(holdingId: string, amount: number
 
 // ─── Portfolio summary ─────────────────────────────────────────────────
 
-export async function getPortfolioSummary() {
+export async function getPortfolioSummary(options?: {
+  captureSnapshot?: boolean;
+  includeHistory?: boolean;
+}) {
   const holdings = await prisma.holding.findMany({
     where: { archived: false },
     include: { account: true, sipRule: true, trades: { orderBy: { occurredAt: "asc" } } },
@@ -567,13 +569,63 @@ export async function getPortfolioSummary() {
   const totalPnl = totalCurrentValue.minus(totalInvested);
   const totalPnlPercent = totalInvested.isZero() ? 0 : totalPnl.div(totalInvested).mul(100).toNumber();
 
-  return {
+  const summary = {
     totalInvested: totalInvested.toNumber(),
     totalCurrentValue: totalCurrentValue.toNumber(),
     totalPnl: totalPnl.toNumber(),
     totalPnlPercent: round2(totalPnlPercent),
     holdings: items,
   };
+
+  if (options?.captureSnapshot !== false) {
+    await recordPortfolioSnapshot(summary);
+  }
+
+  const history = options?.includeHistory === false
+    ? []
+    : await getPortfolioHistory();
+
+  return { ...summary, history };
+}
+
+type PortfolioSnapshotInput = Pick<Awaited<ReturnType<typeof getPortfolioSummary>>, "totalInvested" | "totalCurrentValue">;
+
+export async function recordPortfolioSnapshot(summary?: PortfolioSnapshotInput) {
+  const current = summary ?? await getPortfolioSummary({ captureSnapshot: false, includeHistory: false });
+  const snapshotDate = portfolioSnapshotDate(new Date());
+  await prisma.portfolioSnapshot.upsert({
+    where: { snapshotDate },
+    update: {
+      invested: current.totalInvested.toFixed(2),
+      currentValue: current.totalCurrentValue.toFixed(2),
+    },
+    create: {
+      snapshotDate,
+      invested: current.totalInvested.toFixed(2),
+      currentValue: current.totalCurrentValue.toFixed(2),
+    },
+  });
+}
+
+async function getPortfolioHistory() {
+  const snapshots = await prisma.portfolioSnapshot.findMany({
+    orderBy: { snapshotDate: "asc" },
+    take: 366,
+  });
+
+  return snapshots.map((snapshot) => ({
+    date: snapshot.snapshotDate.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    }),
+    invested: Number(snapshot.invested),
+    currentValue: Number(snapshot.currentValue),
+  }));
+}
+
+function portfolioSnapshotDate(date: Date) {
+  return new Date(`${financeDayKey(date)}T00:00:00.000Z`);
 }
 
 // ─── Price refresh ─────────────────────────────────────────────────────
@@ -615,6 +667,7 @@ export async function refreshPrices() {
     }
   }
 
+  await recordPortfolioSnapshot();
   return results;
 }
 
