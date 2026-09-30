@@ -96,7 +96,7 @@ const TABLE_ASSET_LABELS: Record<string, string> = {
 };
 
 export default function InvestmentsPage() {
-  const { data, isLoading } = useSWR<PortfolioData>("/api/investments");
+  const { data, error, isLoading } = useSWR<PortfolioData>("/api/investments");
   const { data: accounts } = useAccounts();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const [buyOpen, setBuyOpen] = React.useState(false);
@@ -192,6 +192,13 @@ export default function InvestmentsPage() {
 
       {isLoading ? (
         <div className="grid gap-3 lg:grid-cols-4"><Skeleton className="h-[100px]" /><Skeleton className="h-[100px]" /><Skeleton className="h-[100px]" /><Skeleton className="h-[100px]" /></div>
+      ) : error ? (
+        <EmptyState
+          icon={<BarChart3 className="h-5 w-5" />}
+          title="Couldn't load investments"
+          description="Your holdings have not been changed. Try loading the portfolio again."
+          action={<Button onClick={() => mutate("/api/investments")}>Try again</Button>}
+        />
       ) : holdings.length === 0 ? (
         <EmptyState
           icon={<BarChart3 className="h-5 w-5" />}
@@ -210,7 +217,7 @@ export default function InvestmentsPage() {
           </div>
 
           <PortfolioGrowthChart
-            data={data!.history}
+            data={data!.history ?? []}
             formatCurrency={formatCurrency}
             formatCompactCurrency={formatCompactCurrency}
           />

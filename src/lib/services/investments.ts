@@ -578,12 +578,19 @@ export async function getPortfolioSummary(options?: {
   };
 
   if (options?.captureSnapshot !== false) {
-    await recordPortfolioSnapshot(summary);
+    // Portfolio history is an enhancement. It must never make the core
+    // holdings view unavailable while a deployment is awaiting its schema sync.
+    await recordPortfolioSnapshot(summary).catch((error) => {
+      console.error("Failed to record portfolio snapshot", error);
+    });
   }
 
   const history = options?.includeHistory === false
     ? []
-    : await getPortfolioHistory();
+    : await getPortfolioHistory().catch((error) => {
+        console.error("Failed to load portfolio history", error);
+        return [];
+      });
 
   return { ...summary, history };
 }
