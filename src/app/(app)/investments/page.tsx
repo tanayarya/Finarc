@@ -336,6 +336,7 @@ function PortfolioGrowthChart({
   formatCompactCurrency: (v: number | string | null | undefined) => string;
 }) {
   const hasHistory = data.length > 1;
+  const latest = data[data.length - 1];
 
   return (
     <Card>
@@ -344,7 +345,7 @@ function PortfolioGrowthChart({
           <div>
             <CardTitle className="text-sm">Portfolio growth</CardTitle>
             <CardDescription>
-              {hasHistory ? "Invested cost compared with your portfolio's current value" : "Your first daily snapshot is saved today; this history builds as prices refresh."}
+              {hasHistory ? "Invested cost compared with your portfolio's current value" : "Your first daily snapshot is saved today; the values below will become a two-line history with the next snapshot."}
             </CardDescription>
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -354,6 +355,12 @@ function PortfolioGrowthChart({
         </div>
       </CardHeader>
       <CardContent>
+        {!hasHistory && latest && (
+          <div className="mb-4 grid grid-cols-2 divide-x rounded-md border text-sm">
+            <div className="px-3 py-2.5"><p className="text-xs text-muted-foreground">Invested today</p><p className="tabular font-medium">{formatCurrency(latest.invested)}</p></div>
+            <div className="px-3 py-2.5"><p className="text-xs text-muted-foreground">Current value</p><p className="tabular font-medium text-emerald-600">{formatCurrency(latest.currentValue)}</p></div>
+          </div>
+        )}
         <div className="h-[220px] w-full sm:h-[250px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 10, right: 8, left: -12, bottom: 0 }}>

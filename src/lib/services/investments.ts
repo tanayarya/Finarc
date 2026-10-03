@@ -596,39 +596,99 @@ export async function getPortfolioSummary(options?: {
 }
 
 type PortfolioSnapshotInput = Pick<Awaited<ReturnType<typeof getPortfolioSummary>>, "totalInvested" | "totalCurrentValue">;
+type PortfolioHistoryPoint = { date: string; invested: number; currentValue: number };
+
+const PORTFOLIO_HISTORY_SETTING = "portfolioHistory";
 
 export async function recordPortfolioSnapshot(summary?: PortfolioSnapshotInput) {
   const current = summary ?? await getPortfolioSummary({ captureSnapshot: false, includeHistory: false });
   const snapshotDate = portfolioSnapshotDate(new Date());
-  await prisma.portfolioSnapshot.upsert({
-    where: { snapshotDate },
-    update: {
-      invested: current.totalInvested.toFixed(2),
-      currentValue: current.totalCurrentValue.toFixed(2),
-    },
-    create: {
-      snapshotDate,
-      invested: current.totalInvested.toFixed(2),
-      currentValue: current.totalCurrentValue.toFixed(2),
-    },
-  });
+  const point = {
+    date: snapshotDate.toISOString(),
+    invested: current.totalInvested,
+    currentValue: current.totalCurrentValue,
+  };
+
+  try {
+    await prisma.portfolioSnapshot.upsert({
+      where: { snapshotDate },
+      update: {
+        invested: current.totalInvested.toFixed(2),
+        currentValue: current.totalCurrentValue.toFixed(2),
+      },
+      create: {
+        snapshotDate,
+        invested: current.totalInvested.toFixed(2),
+        currentValue: current.totalCurrentValue.toFixed(2),
+      },
+    });
+  } catch {
+    // Existing deployments can keep recording history before their new table
+    // is synced. AppSetting is already present in every supported database.
+    await savePortfolioHistoryFallback(point);
+  }
 }
 
 async function getPortfolioHistory() {
-  const snapshots = await prisma.portfolioSnapshot.findMany({
-    orderBy: { snapshotDate: "asc" },
-    take: 366,
-  });
+  let snapshotHistory: PortfolioHistoryPoint[] = [];
+  try {
+    const snapshots = await prisma.portfolioSnapshot.findMany({
+      orderBy: { snapshotDate: "asc" },
+      take: 366,
+    });
+    snapshotHistory = snapshots.map((snapshot) => ({
+      date: snapshot.snapshotDate.toISOString(),
+      invested: Number(snapshot.invested),
+      currentValue: Number(snapshot.currentValue),
+    }));
+  } catch {
+    // The fallback below keeps the graph available during a schema rollout.
+  }
 
-  return snapshots.map((snapshot) => ({
-    date: snapshot.snapshotDate.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      timeZone: "UTC",
-    }),
-    invested: Number(snapshot.invested),
-    currentValue: Number(snapshot.currentValue),
-  }));
+  const combined = new Map<string, PortfolioHistoryPoint>();
+  for (const point of [...snapshotHistory, ...(await getPortfolioHistoryFallback())]) {
+    combined.set(point.date.slice(0, 10), point);
+  }
+
+  return [...combined.values()]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-366)
+    .map((point) => ({
+      ...point,
+      date: new Date(point.date).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      }),
+    }));
+}
+
+async function savePortfolioHistoryFallback(point: PortfolioHistoryPoint) {
+  const existing = await getPortfolioHistoryFallback();
+  const next = [...existing.filter((item) => item.date.slice(0, 10) !== point.date.slice(0, 10)), point]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-366);
+  await prisma.appSetting.upsert({
+    where: { key: PORTFOLIO_HISTORY_SETTING },
+    update: { value: JSON.stringify(next) },
+    create: { key: PORTFOLIO_HISTORY_SETTING, value: JSON.stringify(next) },
+  });
+}
+
+async function getPortfolioHistoryFallback(): Promise<PortfolioHistoryPoint[]> {
+  const setting = await prisma.appSetting.findUnique({ where: { key: PORTFOLIO_HISTORY_SETTING } });
+  if (!setting?.value) return [];
+  try {
+    const parsed = JSON.parse(setting.value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((point): point is PortfolioHistoryPoint =>
+      typeof point?.date === "string" &&
+      Number.isFinite(point?.invested) &&
+      Number.isFinite(point?.currentValue)
+    );
+  } catch {
+    return [];
+  }
 }
 
 function portfolioSnapshotDate(date: Date) {
